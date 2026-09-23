@@ -1,0 +1,60 @@
+// Acceptance example B: a ring held by three ropes.
+//
+// Two tensions and two angles are given. The third rope's tension AND direction are
+// unknowns; the two balance constraints fix them. The equilibrium CHECK is a readout,
+// not a constraint: what is being solved for stays visible in the document.
+
+project "byrne" version=1 {
+  units length="m" mass="kg" angle="deg" force="N" time="s"
+  precision sig=6
+}
+
+param "T1" "50 N" type="force"
+param "a1" "30 deg" type="angle"
+param "T2" "40 N" type="force"
+param "a2" "150 deg" type="angle"
+
+param "T3" "?" type="force" init="10 N"
+param "phi" "?" type="angle" init="200 deg"
+
+instance "ring" "std/mechanics/point-mass" {
+  param "mass" "0 kg"
+  param "radius" "40 mm"
+}
+
+instance "r1" "std/mechanics/rope-2d" {
+  param "body" "ring"
+  param "tension" "T1"
+  param "angle" "a1"
+}
+
+instance "r2" "std/mechanics/rope-2d" {
+  param "body" "ring"
+  param "tension" "T2"
+  param "angle" "a2"
+}
+
+instance "r3" "std/mechanics/rope-2d" {
+  param "body" "ring"
+  param "tension" "T3"
+  param "angle" "phi"
+}
+
+constraint "balance_x" "residual" "dot(ring.netforce, world.x)" value="1e-12 N"
+constraint "balance_y" "residual" "dot(ring.netforce, world.y)" value="1e-12 N"
+
+check "bal" "equilibrium" {
+  body "ring"
+  tolerance "1e-9 N"
+  directions "world.x" "world.y"
+}
+
+label "r1" latex="T_1" anchor="mid" offset="5 mm"
+label "r2" latex="T_2" anchor="mid" offset="5 mm"
+label "r3" latex="T_3" anchor="mid" offset="5 mm"
+
+view "front" {
+  camera along="vec(0, 0, -1)" up="vec(0, 1, 0)" fit="all"
+  plane "world"
+  visible "geometry" "vectors" "labels"
+}

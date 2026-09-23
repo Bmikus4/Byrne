@@ -1080,48 +1080,140 @@ without a ticket explaining it is a regression.
 
 ## 13. Status matrix
 
-Phase 1 is a design. Nothing is implemented.
+Phases 2 to 4 are built. 165 automated tests; `npm test`.
 
-| Feature | Status |
-|---|---|
-| Architecture, stack, licences | designed |
-| DSL grammar + vocabulary | designed |
-| Component definition schema | designed |
-| Solver choice + rank analysis | designed |
-| Units / dimensions type system | designed |
-| Frame hierarchy + tensors | designed |
-| Interface layout + interaction scripts | designed |
-| Acceptance expected values | computed (§9) |
-| — everything below is code — | |
-| DSL parse / canonical write | planned |
-| Dimensional inference | planned |
-| Frame transforms | planned |
-| Dependency graph + transactions | planned |
-| 3D viewport + construction plane | planned |
-| Numeric widget | planned |
-| Palette drag-and-drop | planned |
-| Outliner | planned |
-| Component extraction | planned |
-| Constraint solver | planned |
-| Field evaluators + flux | planned |
-| Tensor display | planned |
-| MathJax labels | planned |
-| SVG / PDF / TikZ / glTF / USD export | planned |
-| Acceptance A–F | planned |
+| Feature | Status | Evidence |
+|---|---|---|
+| Dimensional algebra, rational exponents | implemented, tested | `test/units.test.ts` |
+| Unit table, prefixes, imperial | implemented, tested | `test/units.test.ts` |
+| Parse-time dimensional inference | implemented, tested | `test/units.test.ts` |
+| Sandboxed evaluator, frozen function table | implemented, tested | `test/units.test.ts` |
+| Frame tree, quaternion transforms | implemented, tested | `test/acceptance-bce.test.ts` |
+| Rank-2 tensor transform | implemented, tested | `test/acceptance-bce.test.ts` |
+| Reverse-mode AD | implemented, tested | `test/solver.test.ts` |
+| LM solver, rank analysis, conflict naming | implemented, tested | `test/solver.test.ts` |
+| Solver determinism | implemented, tested | `test/solver.test.ts` |
+| DSL read, canonical write | implemented, tested | `test/model.test.ts` |
+| Round-trip: semantic + textual fixpoint | implemented, tested | `test/model.test.ts` |
+| Dependency graph, cycle detection | implemented, tested | `test/model.test.ts` |
+| Component system, nesting, overrides | implemented, tested | `test/model.test.ts` |
+| Component extraction (inference) | implemented, tested | `test/model.test.ts` |
+| Definition edit, diff, destructive guard | implemented, tested | `test/model.test.ts` |
+| No privileged built-ins | implemented, tested | `test/model.test.ts` |
+| Field evaluator, flux quadrature, field lines | implemented, tested | `test/acceptance-d.test.ts` |
+| Figure IR, analytic projection | implemented, tested | `test/export.test.ts` |
+| SVG export, MathJax glyph outlines | implemented, tested | `test/export.test.ts` |
+| PDF export, flattened label paths | implemented, tested | `test/export.test.ts` |
+| TikZ export, stated subset | implemented, tested | `test/export.test.ts` |
+| Export reproducibility (byte-identical) | implemented, tested | `test/export.test.ts` |
+| No rasteriser in the export path | implemented, tested | `test/import-graph.test.ts` |
+| `core/` and `figure/` are DOM-free | implemented, tested | `test/import-graph.test.ts` |
+| Operation registry, undo/redo | implemented, tested | `test/ui-model.test.ts` |
+| Acceptance A (inclined plane) | implemented, tested | `test/acceptance-a.test.ts` |
+| Acceptance B (three-force) | implemented, tested | `test/acceptance-bce.test.ts` |
+| Acceptance C (spring chain) | implemented, tested | `test/acceptance-bce.test.ts` |
+| Acceptance D (flux) | implemented, tested | `test/acceptance-d.test.ts` |
+| Acceptance E (frame round-trip) | implemented, tested | `test/acceptance-bce.test.ts` |
+| Acceptance F (unit round-trip) | implemented, tested | `test/model.test.ts` |
+| Panels: palette, outliner, inspector, strip | implemented, tested | `test/ui-render.test.ts` |
+| Numeric widget: typing, unit rejection | implemented, tested | `test/ui-render.test.ts` |
+| Command palette, Ctrl-K, registry listing | implemented, tested | `test/ui-render.test.ts` |
+| Source panel, override dot and revert | implemented, tested | `test/ui-render.test.ts` |
+| CLI: check, render, fmt, primitives | implemented, **unobserved** | `docs/MANUAL-ACCEPTANCE.md` |
+| 3D viewport (three.js rendering) | implemented, **unobserved** | `docs/MANUAL-ACCEPTANCE.md` M1, M5 |
+| Numeric widget drag-to-scrub | implemented, **unobserved** | `docs/MANUAL-ACCEPTANCE.md` M2 |
+| Palette-to-viewport drag and drop | implemented, **unobserved** | `docs/MANUAL-ACCEPTANCE.md` M1 |
+| Labels in the viewport | implemented, **unobserved** | `docs/MANUAL-ACCEPTANCE.md` M6 |
+| glTF / USD export | planned | -- |
+| Electron packaging | planned | the same bundle runs in a browser today |
+| Hidden-line removal beyond depth sort | planned | §10 risk 1 stands |
+| Object-to-object drop as an operation | partial | operations exist; the viewport drop path is palette-only |
 
-No feature moves to `implemented` without a passing correctness test, or — where a test is
-impossible — a written manual acceptance procedure in `docs/MANUAL-ACCEPTANCE.md` and a
-recorded result.
+**Measured, by `scripts/measure.mjs` and carried in every ticket:**
+
+| Example | Quantity | Value | Relative error against the closed form |
+|---|---|---|---|
+| A, 15° | `N` | 18.944993008755 N | 0 |
+| A, 30° | `N` | 16.985616052045 N | 0 |
+| A, 45° | `N` | 13.868697431446 N | 1.3e-16 |
+| A, 60° | `N` | 9.806650000000 N | 0 |
+| A, 30° | `F_∥` | 4.710965184386 N | 1.9e-16 |
+| B | `T₃` | 45.825756949558 N | 1.6e-16 |
+| B | ΣF residual | 2.0e-14 N | -- |
+| C | `y₁`, `y₂` | -0.494238, -0.852320 m | 0 |
+| D | flux, centred | 112.940906737302 V·m | 8.0e-14 (quadrature) |
+| D | flux, charge outside | 4.8e-15 V·m | -- |
+| E | round-trip, worst component | 2.2e-16 | -- |
+| F | model after a unit change | bit-identical | -- |
+
+No feature above reads `implemented, tested` without a test that fails if the behaviour
+goes away.
+
+The five that read **unobserved** are the ones that need a GPU and a person. They are
+written, they compile, and the model layer under them is tested — but **nobody has looked
+at them**. The session that built this had no browser. `docs/MANUAL-ACCEPTANCE.md` holds
+the procedure for each and records, per step, what is covered by a test and what is not.
+Reading "unobserved" as "works" is the error this row exists to prevent.
 
 ---
 
-## 14. Phase 2 scope, for the record
+## 14. What changed under contact with the code
 
-End-to-end but thin, real on every axis: DSL parse + canonical write with the two round-trip
-properties tested; dimensional inference rejecting `5` on a length field with a named
-mismatch; frame tree with correct transforms; three.js viewport with a visible active
-construction plane; the numeric widget; palette→viewport drag instantiating a component;
-outliner reflecting and driving selection; save/reopen lossless; acceptance A working end to
-end; acceptance E and F passing as automated tests. Plus the four Phase-2 spikes from §10.
+A design document that still says what it said before anything was built is not being
+read. These are the places the plan met the work and lost, and why.
 
-Phase 2 begins on request.
+**KDL has no raw strings and drops comments (risk 4, materialised).** `kdljs` 0.3.0
+implements KDL v1 without `r"..."`, and its parser discards comments entirely. Two
+consequences, both in `docs/DSL.md`: LaTeX is written with doubled backslashes
+(`latex="\\theta"`), and only comments preceding a TOP-LEVEL node survive a reformat,
+recovered by a brace-depth scan of the source. The fallback the design named was taken.
+
+**Juxtaposition after a number is a unit.** A parameter named `m` (a mass) and the metre
+collide in `9.81 m/s^2`. The rule is now explicit and lexical: after a numeric literal, an
+adjacent identifier is a unit; multiplying by a name needs `*`. Unit-bearing literals are
+lifted out of the source before mathjs sees it, so there is no ambiguity left to resolve
+at evaluation.
+
+**One tape, not two evaluators.** The design had a numeric evaluator and implied a second,
+differentiable one for residuals. Instead the whole scene is evaluated onto a single AD
+tape: constants become tape constants, unknowns become tape variables, and one
+`forward(x)` after the solve gives the value of every quantity. The Jacobian falls out.
+There is no second evaluator, so there is nothing to diverge.
+
+**Frames are a REPORT attribute.** Components are stored in world coordinates and a
+quantity's frame records the basis it is reported in. A vector is frame-invariant; what
+re-expression changes is the report, not the physics. Addition still requires the frames
+to agree, because adding a quantity you are thinking of in ramp coordinates to one in
+world coordinates is the mistake worth catching. `dot`, `cross` and projection do not,
+because they are invariant and the result is a scalar.
+
+**A check measures; a constraint constrains.** The design let an equilibrium check emit
+solver rows. It no longer does. Imposing equilibrium is a constraint the user adds, so
+what is being solved for is visible in the document rather than implied by a readout. The
+`equilibrium` operation adds both, together.
+
+**`residual` is the only constraint primitive.** Contact, balance and fixed distance are
+all one scalar expression driven to zero. `std/mechanics/normal-force` is a contact
+constraint in six lines of DSL, and the engine has no faster path than the one it uses.
+
+**The solver needed a polish step.** The damping that keeps a drag stable also stops the
+last step short, leaving the answer at the declared tolerance rather than at machine
+precision. After convergence the solver takes up to four undamped Gauss-Newton steps, each
+accepted only if it lowers the cost. That is the difference between 7e-13 and 0 in the
+table above.
+
+**MathJax needed `PACKAGE_VERSION` defined.** Its version module falls back to
+`eval('require')`, which throws in a browser bundle and would take the label pipeline with
+it. Defining the constant at build time is MathJax's own mechanism and removes the only
+`eval` in the tree -- which matters, because §11 claims there is none.
+
+---
+
+## 15. Phase 5, for the record
+
+Not built, and not pretended to be: glTF and USD export; Electron packaging (the same
+bundle runs in a browser today, which is how it is being tried); hidden-line removal
+beyond depth-sorted painter's algorithm; object-to-object drops in the viewport as
+operations; and dynamics, which remains explicitly future work with its own state vector
+and its own name -- `t` is a scrub parameter and there is no integrator in the
+architecture for a `d/dt` to attach to.

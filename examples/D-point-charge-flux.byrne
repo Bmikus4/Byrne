@@ -1,0 +1,46 @@
+// Acceptance example D: a point charge and Gauss's law.
+//
+// The flux is computed by quadrature over the sphere, not by looking up Q/eps0. That is
+// the point: it tests the field evaluator, and Gauss's law is the independent answer.
+
+project "byrne" version=1 {
+  units length="m" mass="kg" angle="deg" force="N" time="s" charge="C"
+  precision sig=6
+}
+
+param "Q" "1 nC" type="charge"
+param "d" "0 m" type="length" range="-0.9 m .. 0.9 m"
+param "R" "0.5 m" type="length"
+
+instance "q1" "std/fields/point-charge" {
+  param "Q" "Q"
+  param "at" "vec(d, 0 m, 0 m)"
+}
+
+instance "surf" "std/fields/flux-surface" {
+  param "center" "world.origin"
+  param "radius" "R"
+}
+
+instance "probe" "std/fields/field-probe" {
+  param "at" "vec(0.3 m, 0 m, 0 m)"
+}
+
+measure "flux" "flux" {
+  of "q1"
+  about "surf"
+}
+
+measure "E_probe" "field" {
+  of "q1"
+  about "probe"
+}
+
+label "q1" latex="Q" anchor="above-right" offset="5 mm"
+label "surf" latex="S" anchor="above-right" offset="5 mm"
+
+view "front" {
+  camera along="vec(0, 1, 0)" up="vec(0, 0, 1)" fit="all"
+  plane "world"
+  visible "geometry" "field-lines" "labels"
+}

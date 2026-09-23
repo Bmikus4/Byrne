@@ -1,0 +1,75 @@
+// Acceptance example A: a mass on a ramp, with friction, in 3D.
+//
+// Everything the reader is meant to vary is named at the top. The normal force is NOT
+// typed in: its magnitude is a solver unknown, fixed by the contact residual inside the
+// `normal-force` component.
+
+project "byrne" version=1 {
+  units length="m" mass="kg" angle="deg" force="N" time="s"
+  precision sig=6
+}
+
+param "theta" "30 deg" type="angle" range="0 deg .. 80 deg"
+param "L" "3 m" type="length"
+param "m" "2 kg" type="mass"
+param "mu" "0.3" type="scalar"
+param "s" "1.2 m" type="length"
+param "g" "9.80665 m/s^2" type="acceleration"
+
+instance "ramp" "std/mechanics/inclined-plane" {
+  param "angle" "theta"
+  param "length" "L"
+}
+
+instance "block" "std/mechanics/point-mass" {
+  param "mass" "m"
+  param "at" "ramp.base + ramp.updir * s"
+}
+
+instance "W" "std/mechanics/weight" {
+  param "body" "block"
+  param "g" "g"
+}
+
+instance "N" "std/mechanics/normal-force" {
+  param "body" "block"
+  param "surface" "ramp"
+}
+
+instance "f" "std/mechanics/kinetic-friction" {
+  param "body" "block"
+  param "surface" "ramp"
+  param "mu" "mu"
+  param "normal" "N.N"
+}
+
+measure "net" "resultant" {
+  of "W.force" "N.force" "f.force"
+  express-in "ramp.frame"
+}
+
+measure "F_along" "component" {
+  of "net"
+  along "ramp.downdir"
+}
+
+measure "a_along" "expression" {
+  of "F_along / m"
+}
+
+check "bal" "equilibrium" {
+  body "block"
+  tolerance "1e-9 N"
+}
+
+label "block" latex="m" anchor="above-right" offset="4 mm"
+label "theta" latex="\\theta" anchor="arc-mid" offset="3 mm"
+label "N" latex="\\vec{N}" anchor="tip" offset="4 mm"
+label "f" latex="\\vec{f}" anchor="tip" offset="4 mm"
+label "W" latex="m\\vec{g}" anchor="tip" offset="4 mm"
+
+view "side" {
+  camera along="vec(0, 1, 0)" up="vec(0, 0, 1)" fit="all"
+  plane "ramp.local"
+  visible "geometry" "vectors" "labels" "angles"
+}

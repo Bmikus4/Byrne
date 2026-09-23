@@ -1,0 +1,29 @@
+// Acceptance example E: express a vector in a rotated frame and back.
+//
+// Frame B is the world rotated 37 degrees about (1, 2, 3). The re-expressed vector is a
+// NEW named object; nothing mutates. The world components never change, because a vector
+// is a frame-invariant object -- the frame says which basis to REPORT it in.
+
+project "byrne" version=1 {
+  units length="m" mass="kg" angle="deg" force="N" time="s"
+  precision sig=6
+}
+
+frame "B" parent="world" axis="vec(1, 2, 3)" angle="37 deg"
+
+measure "vA" "expression" {
+  of "vec(1.5 m, -0.7 m, 2.2 m)"
+}
+
+measure "vB" "expression" {
+  of "vA"
+  express-in "B"
+}
+
+measure "vA_again" "expression" {
+  of "vB"
+  express-in "world"
+}
+
+label "vA" latex="\\vec{v}_A" anchor="tip" offset="4 mm"
+label "vB" latex="\\vec{v}_B" anchor="tip" offset="4 mm"

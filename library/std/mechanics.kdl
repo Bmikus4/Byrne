@@ -1,0 +1,255 @@
+// Mechanics. Every component here is written in the same language a user gets; the
+// engine knows only the primitives listed in docs/PRIMITIVES.md, and
+// test/no-privileged-builtins.test.ts fails the build if that stops being true.
+
+component "std/mechanics/fixed-support" version=1 {
+  meta {
+    title "Fixed support"
+    category "Mechanics"
+    description "A point that does not move. Anchors a spring, rope or linkage."
+  }
+  param "at" type="point" default="world.origin"
+  port "mount" type="point" role="out" accept="is-point(x)"
+  expose {
+    quantity "position" "at"
+  }
+  geometry {
+    anchor "glyph" at="at"
+  }
+  style {
+    stroke "structure"
+  }
+}
+
+component "std/mechanics/point-mass" version=1 {
+  meta {
+    title "Point mass"
+    category "Mechanics"
+    description "A mass with a position and no extent. The body forces are summed at."
+  }
+  param "mass" type="mass" default="1 kg"
+  param "at" type="point" default="world.origin"
+  param "radius" type="length" default="30 mm" description="drawn size only; not physical"
+  port "seat" type="point" role="in" accept="is-point(x) or is-surface(x)"
+  expose {
+    quantity "position" "at"
+  }
+  geometry {
+    sphere "body" center="at" radius="radius"
+  }
+  style {
+    stroke "body"
+    fill "body"
+  }
+  label latex="m" anchor="above-right" offset="4 mm"
+}
+
+component "std/mechanics/inclined-plane" version=1 {
+  meta {
+    title "Inclined plane"
+    category "Mechanics"
+    description "A ramp of a given angle and slope length, sitting on the ground plane."
+  }
+  param "angle" type="angle" default="30 deg" min="0 deg" max="89 deg"
+  param "length" type="length" default="3 m" min="0 m"
+  param "width" type="length" default="1 m" min="0 m"
+  param "base" type="point" default="world.origin"
+  port "surface" type="surface" role="out" accept="is-point(x)"
+  // The slope runs in +x and rises in +z; the normal leans back over the slope.
+  expose {
+    quantity "updir" "vec(cos(angle), 0, sin(angle))"
+    quantity "downdir" "-updir"
+    quantity "normal" "vec(-sin(angle), 0, cos(angle))"
+    quantity "apex" "base + updir * length"
+    quantity "foot" "base + vec(cos(angle), 0, 0) * length"
+  }
+  frame "local" origin="base" x="updir" up="normal"
+  geometry {
+    polygon "wedge" p0="base" p1="foot" p2="apex"
+    arc "theta" center="base" from="vec(1, 0, 0)" to="updir" radius="0.45 m" normal="vec(0, -1, 0)"
+  }
+  style {
+    stroke "structure"
+  }
+  label latex="\\theta" anchor="arc-mid" offset="3 mm"
+}
+
+component "std/mechanics/weight" version=1 {
+  meta {
+    title "Weight"
+    category "Mechanics"
+    description "The gravitational force on a body. Points along -z by construction."
+  }
+  param "body" type="ref"
+  param "g" type="acceleration" default="9.80665 m/s^2"
+  expose {
+    quantity "magnitude" "body.mass * g"
+    quantity "force" "-(body.mass * g) * world.z"
+  }
+  geometry {
+    arrow "glyph" at="body.position" vector="force"
+  }
+  style {
+    stroke "force"
+  }
+  label latex="m\\vec{g}" anchor="tip" offset="4 mm"
+}
+
+component "std/mechanics/normal-force" version=1 {
+  meta {
+    title "Normal force"
+    category "Mechanics"
+    description "Contact reaction along a surface normal. Its magnitude is solved, not given."
+  }
+  param "body" type="ref"
+  param "surface" type="ref"
+  param "N" type="force" unknown=#true default="10 N"
+  expose {
+    quantity "magnitude" "N"
+    quantity "force" "N * surface.normal"
+  }
+  // The whole of contact mechanics, in one row: a rigid surface permits no net force
+  // into itself. This is what makes N an unknown the solver finds rather than a number
+  // the user has to work out and type in.
+  constraints {
+    residual name="contact" label="normal force: no net force into the surface" expr="dot(body.netforce, surface.normal)" tol="1e-12 N"
+  }
+  geometry {
+    arrow "glyph" at="body.position" vector="force"
+  }
+  style {
+    stroke "force"
+  }
+  label latex="\\vec{N}" anchor="tip" offset="4 mm"
+}
+
+component "std/mechanics/kinetic-friction" version=1 {
+  meta {
+    title "Kinetic friction"
+    category "Mechanics"
+    description "Coulomb friction opposing downslope sliding: mu times the normal force."
+  }
+  param "body" type="ref"
+  param "surface" type="ref"
+  param "mu" type="scalar" default="0.3" min="0"
+  param "normal" type="force" default="0 N" description="magnitude of the normal force"
+  expose {
+    quantity "magnitude" "mu * normal"
+    quantity "force" "(mu * normal) * surface.updir"
+  }
+  geometry {
+    arrow "glyph" at="body.position" vector="force"
+  }
+  style {
+    stroke "force"
+  }
+  label latex="\\vec{f}" anchor="tip" offset="4 mm"
+}
+
+component "std/mechanics/rope-2d" version=1 {
+  meta {
+    title "Rope"
+    category "Mechanics"
+    description "An inextensible rope pulling a body at a given angle in the xy plane."
+  }
+  param "body" type="ref"
+  param "tension" type="force" default="10 N" min="0 N"
+  param "angle" type="angle" default="0 deg"
+  param "length" type="length" default="1 m"
+  expose {
+    quantity "dir" "vec(cos(angle), sin(angle), 0)"
+    quantity "force" "tension * dir"
+    quantity "anchor" "body.position + dir * length"
+  }
+  geometry {
+    segment "line" from="body.position" to="anchor"
+    arrow "glyph" at="body.position" vector="force"
+  }
+  style {
+    stroke "force"
+  }
+  label latex="T" anchor="mid" offset="4 mm"
+}
+
+component "std/mechanics/spring" version=1 {
+  meta {
+    title "Spring"
+    category "Mechanics"
+    description "Ideal massless linear spring between two bodies, drawn as a helix."
+  }
+  param "a" type="ref"
+  param "b" type="ref"
+  param "k" type="stiffness" default="100 N/m" min="0 N/m"
+  param "L0" type="length" default="0.5 m" min="0 m"
+  param "coils" type="integer" default="8" min="2" max="64"
+  param "radius" type="length" default="20 mm" min="0 m"
+  port "a" type="point" role="in" accept="is-point(x) or has-port(x, 'mount')"
+  port "b" type="point" role="out" accept="is-point(x) or has-port(x, 'mount')"
+  expose {
+    quantity "delta" "b.position - a.position"
+    quantity "length" "norm(delta)"
+    quantity "extension" "length - L0"
+    quantity "dir" "normalize(delta)"
+    quantity "tension" "k * extension"
+    quantity "force-on-b" "-(k * extension) * dir"
+    quantity "force-on-a" "(k * extension) * dir"
+  }
+  geometry {
+    helix "coil" from="a.position" to="b.position" turns="coils" radius="radius"
+  }
+  style {
+    stroke "structure"
+  }
+  label latex="k" anchor="mid" offset="6 mm"
+}
+
+component "std/mechanics/damper" version=1 {
+  meta {
+    title "Damper"
+    category "Mechanics"
+    description "Linear dashpot. Force depends on a velocity the static model does not have, so it contributes a glyph and a stiffness-free length only."
+  }
+  param "a" type="ref"
+  param "b" type="ref"
+  param "c" type="damping" default="10 N*s/m" min="0 N*s/m"
+  expose {
+    quantity "delta" "b.position - a.position"
+    quantity "length" "norm(delta)"
+  }
+  geometry {
+    segment "body" from="a.position" to="b.position"
+  }
+  style {
+    stroke "structure"
+  }
+}
+
+// A composite: a mass and its own weight, in one drop. Nothing about it is special --
+// it is a component whose internals are two other components, which is what "components
+// nest arbitrarily" has to mean if it means anything.
+component "std/mechanics/hanging-mass" version=1 {
+  meta {
+    title "Hanging mass"
+    category "Mechanics"
+    description "A point mass that brings its own weight force. Composite of point-mass and weight."
+  }
+  param "mass" type="mass" default="1 kg"
+  param "at" type="point" default="world.origin"
+  param "g" type="acceleration" default="9.80665 m/s^2"
+  port "mount" type="point" role="in" accept="is-point(x)"
+  instance "body" "std/mechanics/point-mass" {
+    param "mass" "mass"
+    param "at" "at"
+  }
+  instance "gravity" "std/mechanics/weight" {
+    param "body" "body"
+    param "g" "g"
+  }
+  expose {
+    quantity "position" "body.position"
+    quantity "weight" "gravity.force"
+  }
+  style {
+    stroke "body"
+  }
+}

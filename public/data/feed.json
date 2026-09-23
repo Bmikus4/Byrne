@@ -1,0 +1,83 @@
+[
+  {
+    "id": "T0001",
+    "at": "2026-09-23T06:10:37Z",
+    "headline": "Phases 2-4 built. 165 tests. Acceptance A-F agree with the closed forms to 8e-14 worst case; flux 112.940906737302 V.m against Gauss's law.",
+    "tests": 165,
+    "worstRelativeError": 7.964759000603862e-14,
+    "allConverged": true,
+    "examples": {
+      "A": {
+        "rows": {
+          "15deg": {
+            "N": 18.944993008755382,
+            "along": -0.6072023253173452,
+            "errN": 0,
+            "errAlong": 0,
+            "converged": true
+          },
+          "30deg": {
+            "N": 16.98561605204533,
+            "along": 4.710965184386398,
+            "errN": 0,
+            "errAlong": 1.8853427799547833e-16,
+            "converged": true
+          },
+          "45deg": {
+            "N": 13.868697431446112,
+            "along": 9.708088202012277,
+            "errN": 1.2808389887953785e-16,
+            "errAlong": 0,
+            "converged": true
+          },
+          "60deg": {
+            "N": 9.806650000000001,
+            "along": 14.043621052045328,
+            "errN": 0,
+            "errAlong": 0,
+            "converged": true
+          }
+        },
+        "worstRelativeError": 1.8853427799547833e-16
+      },
+      "B": {
+        "T3": 45.82575694955839,
+        "phiDeg": 259.10660535086913,
+        "errT3": 1.5505313672007928e-16,
+        "residual": 1.9539925233402755e-14,
+        "verdict": "well-constrained",
+        "converged": true
+      },
+      "C": {
+        "y1": -0.4942381993243243,
+        "y2": -0.852320179054054,
+        "err": 0,
+        "verdict": "well-constrained",
+        "converged": true
+      },
+      "D": {
+        "centred": 112.94090673730224,
+        "offCentre": 112.94090673731091,
+        "outside": 4.809520837145698e-15,
+        "closedForm": 112.94090673730192,
+        "err": 7.964759000603862e-14,
+        "outsideAbs": 4.809520837145698e-15
+      },
+      "E": {
+        "worstComponent": 2.220446049250313e-16
+      },
+      "F": {
+        "modelIdentical": true,
+        "exportIdentical": true
+      }
+    },
+    "figures": {
+      "A-inclined-plane.svg": 3271,
+      "B-three-force.svg": 1564,
+      "C-spring-chain.svg": 7768,
+      "D-point-charge-flux.svg": 2757,
+      "E-frame-roundtrip.svg": 4140
+    },
+    "components": 14
+  }
+]

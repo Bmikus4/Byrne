@@ -1,0 +1,82 @@
+// Fields. Field quantities are DEFERRED measures: they are computed from the solved
+// configuration rather than contributing to it (see src/core/fields.ts for why).
+
+component "std/fields/point-charge" version=1 {
+  meta {
+    title "Point charge"
+    category "Fields"
+    description "A charge at a point. Source of the electrostatic field."
+  }
+  param "Q" type="charge" default="1 nC"
+  param "at" type="point" default="world.origin"
+  param "radius" type="length" default="25 mm" description="drawn size only"
+  port "site" type="point" role="out" accept="is-point(x)"
+  expose {
+    quantity "charge" "Q"
+    quantity "position" "at"
+  }
+  geometry {
+    sphere "body" center="at" radius="radius"
+  }
+  style {
+    stroke "field"
+    fill "field"
+  }
+  label latex="Q" anchor="above-right" offset="4 mm"
+}
+
+component "std/fields/flux-surface" version=1 {
+  meta {
+    title "Flux surface"
+    category "Fields"
+    description "A closed spherical surface. Flux through it is a measure, not a constraint."
+  }
+  param "center" type="point" default="world.origin"
+  param "radius" type="length" default="0.5 m" min="0 m"
+  expose {
+    quantity "position" "center"
+    quantity "R" "radius"
+  }
+  geometry {
+    sphere "surface" center="center" radius="radius"
+  }
+  style {
+    stroke "guide"
+  }
+  label latex="S" anchor="above-right" offset="4 mm"
+}
+
+component "std/fields/uniform-field" version=1 {
+  meta {
+    title "Uniform field"
+    category "Fields"
+    description "A constant field over all space, as a vector quantity."
+  }
+  param "E" type="efield" default="1000 V/m"
+  param "direction" type="direction" default="world.x"
+  expose {
+    quantity "field" "E * normalize(direction)"
+  }
+  style {
+    stroke "field"
+  }
+  label latex="\\vec{E}" anchor="tip" offset="4 mm"
+}
+
+component "std/fields/field-probe" version=1 {
+  meta {
+    title "Field probe"
+    category "Fields"
+    description "Reads the field at a point. A deferred measure names it as its target."
+  }
+  param "at" type="point" default="world.origin"
+  expose {
+    quantity "position" "at"
+  }
+  geometry {
+    marker "glyph" at="at"
+  }
+  style {
+    stroke "field"
+  }
+}

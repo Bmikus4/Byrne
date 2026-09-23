@@ -1,0 +1,97 @@
+// Acceptance example C: a spring-mass chain between a ceiling and a floor.
+//
+// Three springs, two masses, both ends fixed. The mass positions are the unknowns and
+// the two force balances fix them. `s2` overrides the spring definition's stiffness;
+// editing the definition must leave that override standing.
+
+project "byrne" version=1 {
+  units length="m" mass="kg" angle="deg" force="N" time="s"
+  precision sig=6
+}
+
+param "D" "1.2 m" type="length"
+param "L0" "0.3 m" type="length"
+param "k1" "100 N/m" type="stiffness"
+param "k3" "140 N/m" type="stiffness"
+param "mA" "0.5 kg" type="mass"
+param "mB" "0.8 kg" type="mass"
+param "g" "9.80665 m/s^2" type="acceleration"
+
+param "y1" "?" type="length" init="-0.4 m"
+param "y2" "?" type="length" init="-0.8 m"
+
+instance "ceiling" "std/mechanics/fixed-support" {
+  param "at" "world.origin"
+}
+
+instance "floor" "std/mechanics/fixed-support" {
+  param "at" "vec(0 m, 0 m, -D)"
+}
+
+instance "m1" "std/mechanics/point-mass" {
+  param "mass" "mA"
+  param "at" "vec(0 m, 0 m, y1)"
+}
+
+instance "m2" "std/mechanics/point-mass" {
+  param "mass" "mB"
+  param "at" "vec(0 m, 0 m, y2)"
+}
+
+instance "s1" "std/mechanics/spring" {
+  param "a" "ceiling"
+  param "b" "m1"
+  param "k" "k1"
+  param "L0" "L0"
+}
+
+// The middle spring overrides the definition's default stiffness. Editing the
+// definition must not disturb this.
+instance "s2" "std/mechanics/spring" {
+  param "a" "m1"
+  param "b" "m2"
+  param "k" "250 N/m"
+  param "L0" "L0"
+}
+
+instance "s3" "std/mechanics/spring" {
+  param "a" "m2"
+  param "b" "floor"
+  param "k" "k3"
+  param "L0" "L0"
+}
+
+instance "w1" "std/mechanics/weight" {
+  param "body" "m1"
+  param "g" "g"
+}
+
+instance "w2" "std/mechanics/weight" {
+  param "body" "m2"
+  param "g" "g"
+}
+
+constraint "balance_m1" "residual" "dot(m1.netforce, world.z)" value="1e-12 N"
+constraint "balance_m2" "residual" "dot(m2.netforce, world.z)" value="1e-12 N"
+
+check "bal1" "equilibrium" {
+  body "m1"
+  tolerance "1e-9 N"
+  directions "world.z"
+}
+
+check "bal2" "equilibrium" {
+  body "m2"
+  tolerance "1e-9 N"
+  directions "world.z"
+}
+
+label "s1" latex="k_1" anchor="mid" offset="6 mm"
+label "s2" latex="k_2" anchor="mid" offset="6 mm"
+label "s3" latex="k_3" anchor="mid" offset="6 mm"
+
+view "front" {
+  camera along="vec(0, 1, 0)" up="vec(0, 0, 1)" fit="all"
+  plane "world"
+  visible "geometry" "vectors" "labels"
+}
