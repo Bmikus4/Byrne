@@ -1,0 +1,14 @@
+{
+  "name": "byrne",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Physics-diagram authoring environment — design phase",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-docs.mjs"
+  },
+  "devDependencies": {
+    "marked": "^14.1.3"
+  }
+}
