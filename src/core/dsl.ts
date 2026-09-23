@@ -18,7 +18,7 @@
 //   1. read(write(d)) is structurally equal to d, for every document d.
 //   2. write(read(t)) is byte-identical to t, for every t the writer could have produced.
 
-import { parse as kdlParse, KDLValue } from 'kdljs'
+import { parse as kdlParse, Node as KdlNode, Value as KDLValue } from 'kdljs'
 
 // ---------------------------------------------------------------------------
 // Document model
@@ -200,12 +200,8 @@ export const EMPTY_PROJECT: ProjectHeader = {
 // ---------------------------------------------------------------------------
 // Reading
 
-interface KNode {
-  name: string
-  values: KDLValue[]
-  properties: Record<string, KDLValue>
-  children: KNode[]
-}
+/** kdljs's own node shape. Aliased so the vocabulary reads as ours. */
+type KNode = KdlNode
 
 const str = (v: KDLValue | undefined, what: string): string => {
   if (typeof v === 'string') return v

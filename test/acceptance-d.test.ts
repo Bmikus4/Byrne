@@ -45,7 +45,7 @@ describe('acceptance D: point charge flux', () => {
     const E = scene.deferred.find((d) => d.name === 'E_probe')!
     const r = 0.3
     const want = Q / (4 * Math.PI * EPS0 * r * r)
-    expect((E.si as number[])[0]!).toBeCloseTo(want, 9)
+    expect((E.si as readonly number[])[0]!).toBeCloseTo(want, 9)
     expect(dimEq(E.dim, NAMED.efield!)).toBe(true)
   })
 })

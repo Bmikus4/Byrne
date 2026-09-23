@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { ComponentDef, write } from '../core/dsl.js'
 import { loadLibrary } from '../core/library.js'
 import { WORLD } from '../core/frame.js'
+import { Axis, DEFAULT_AXIS, axisView } from './view.js'
 import { Built, Operation, OpContext, applyOperation, rebuild } from './model.js'
 
 // The shipped library and the examples are bundled: there is no network call, no account,
@@ -17,6 +18,8 @@ export const EXAMPLES = import.meta.glob('/examples/*.byrne', {
 export const LIBRARY: ReadonlyMap<string, ComponentDef> = loadLibrary(Object.values(LIBRARY_SOURCES))
 
 export type SnapMode = 'off' | 'grid' | 'angle'
+export type Mode = '2d' | '3d'
+export type Theme = 'light' | 'dark'
 
 export interface UiState {
   built: Built
@@ -26,6 +29,14 @@ export interface UiState {
   /** The four modes that must always be visible and changeable (design doc, §7.1). */
   activeFrame: string
   activePlane: 'xy' | 'yz' | 'zx'
+  /**
+   * 2D is a LOCKED VIEW, not a separate application: the camera is fixed down an axis and
+   * input is constrained to the active construction plane. Every 2D diagram here is a 3D
+   * scene the user chose not to rotate, and most never will -- so this is the default.
+   */
+  mode: Mode
+  viewAxis: Axis
+  theme: Theme
   snap: SnapMode
   gridStep: number
   showSource: boolean
@@ -54,7 +65,10 @@ export const useStore = create<UiState>((setState, get) => ({
   past: [],
   future: [],
   activeFrame: WORLD,
-  activePlane: 'zx',
+  activePlane: axisView(DEFAULT_AXIS).plane,
+  mode: '2d',
+  viewAxis: DEFAULT_AXIS,
+  theme: 'light',
   snap: 'grid',
   gridStep: 0.1,
   showSource: false,
@@ -125,7 +139,15 @@ export const useStore = create<UiState>((setState, get) => ({
     })
   },
 
-  set(key, value) { setState({ [key]: value } as Partial<UiState>) },
+  set(key, value) {
+    setState({ [key]: value } as Partial<UiState>)
+    // The view axis and the construction plane are one fact (src/ui/view.ts); setting
+    // either alone is how a viewport starts lying about which plane you are drawing on.
+    if (key === 'viewAxis') setState({ activePlane: axisView(value as Axis).plane })
+    if (key === 'theme' && typeof document !== 'undefined') {
+      document.documentElement.dataset.theme = value as Theme
+    }
+  },
 
   loadExample(path) {
     const src = EXAMPLES[path]

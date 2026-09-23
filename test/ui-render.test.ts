@@ -202,6 +202,52 @@ constraint "c2" "residual" "a - 2 m" value="1e-12 m"
     const scene = useStore.getState().built.scene!
     expect(scene.values[scene.names.get('s2.k')!.t[0]!]).toBeCloseTo(100, 10)
   })
+  it('opens in 2D looking down -y, with the matching construction plane', () => {
+    load('A-inclined')
+    mount()
+    const st = useStore.getState()
+    expect(st.mode).toBe('2d')
+    expect(st.viewAxis).toBe('-y')
+    expect(st.activePlane).toBe('zx')
+    expect(text()).toContain('2D')
+    expect(text()).toContain('3D')
+  })
+
+  it('keeps the view axis and the construction plane as one fact', () => {
+    load('A-inclined')
+    mount()
+    act(() => useStore.getState().set('viewAxis', '+z'))
+    // Setting the axis alone must carry the plane with it, or the grid and the input
+    // plane part company and the viewport starts lying about where you are drawing.
+    expect(useStore.getState().activePlane).toBe('xy')
+    act(() => useStore.getState().set('viewAxis', '-x'))
+    expect(useStore.getState().activePlane).toBe('yz')
+  })
+
+  it('switches to 3D from the strip and back with the keyboard', () => {
+    load('A-inclined')
+    mount()
+    const seg = [...host.querySelectorAll<HTMLButtonElement>('.seg button')]
+    expect(seg.map((b) => b.textContent)).toEqual(['2D', '3D'])
+    act(() => seg[1]!.click())
+    expect(useStore.getState().mode).toBe('3d')
+    act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: '2', bubbles: true })) })
+    expect(useStore.getState().mode).toBe('2d')
+  })
+
+  it('starts on a white background and toggles to dark and back', () => {
+    load('A-inclined')
+    mount()
+    expect(useStore.getState().theme).toBe('light')
+    expect(document.documentElement.dataset.theme).toBe('light')
+    const toggle = host.querySelector<HTMLButtonElement>('.theme')!
+    expect(toggle.textContent).toBe('dark')
+    act(() => toggle.click())
+    expect(useStore.getState().theme).toBe('dark')
+    expect(document.documentElement.dataset.theme).toBe('dark')
+    act(() => host.querySelector<HTMLButtonElement>('.theme')!.click())
+    expect(useStore.getState().theme).toBe('light')
+  })
 })
 
 /** Set an input's value the way React's synthetic events expect to observe it. */

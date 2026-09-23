@@ -4,6 +4,7 @@
 // The palette makes no distinction between shipped and authored components, because
 // there is none: both are entries in the same library map, loaded from the same DSL.
 
+import type { JSX } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ComponentDef } from '../core/dsl.js'
 import { Scene, reported, numberOf } from '../core/scene.js'
@@ -13,6 +14,7 @@ import { projectScene } from '../figure/project.js'
 import { toSvg } from '../figure/svg.js'
 import { toTikz } from '../figure/tikz.js'
 import { LIBRARY, EXAMPLES, canonicalSource, useStore } from './store.js'
+import { AXES, Axis, axisView } from './view.js'
 import {
   addEquilibrium, clearOverride, deleteObject, extractComponent, instantiate,
   nodeName, operations, setParameter, setProjectUnit, sumVectors, reexpressIn,
@@ -320,6 +322,20 @@ export function StatusStrip(): JSX.Element {
 
   return (
     <footer className="status">
+      <div className="seg" role="group" aria-label="view mode">
+        <button
+          className={st.mode === '2d' ? 'on' : ''}
+          onClick={() => st.set('mode', '2d')}
+          title="locked view down an axis; input constrained to the construction plane"
+        >2D</button>
+        <button
+          className={st.mode === '3d' ? 'on' : ''}
+          onClick={() => st.set('mode', '3d')}
+          title="free orbit"
+        >3D</button>
+      </div>
+      <Mode label="view" value={st.viewAxis} options={[...AXES]}
+        onPick={(a) => { st.set('viewAxis', a as Axis); st.set('mode', '2d') }} />
       <Mode label="units" value={built.doc.project.units.length ?? 'm'}
         options={['m', 'cm', 'mm', 'km', 'ft', 'in']}
         onPick={(u) => st.run(setProjectUnit, { dimension: 'length', unit: u })} />
@@ -335,11 +351,16 @@ export function StatusStrip(): JSX.Element {
       <span className="spacer" />
       {r && (
         <span className={`dof ${r.verdict}`} title={`rank ${r.rank} of ${r.residuals} rows and ${r.unknowns} unknowns`}>
-          {r.dof} DOF &middot; {r.verdict}{r.converged ? '' : ' · NOT CONVERGED'}
+          {r.dof} DOF &middot; {r.verdict}{r.converged ? '' : ' \u00b7 NOT CONVERGED'}
         </span>
       )}
-      {built.error && <span className="err">{built.error}</span>}
-      {st.message && <span className="err">{st.message}</span>}
+      {built.error && <span className="err" title={built.error}>{built.error}</span>}
+      {st.message && <span className="err" title={st.message}>{st.message}</span>}
+      <button
+        className="theme"
+        title={st.theme === 'light' ? 'switch to a dark background' : 'switch to a white background'}
+        onClick={() => st.set('theme', st.theme === 'light' ? 'dark' : 'light')}
+      >{st.theme === 'light' ? 'dark' : 'light'}</button>
     </footer>
   )
 }

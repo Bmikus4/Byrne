@@ -9,7 +9,7 @@
 import { create, all } from 'mathjs'
 import { Dim, dimFromArray, dimEq, dimName, dimToString, DIMLESS, isDimless } from './dimension.js'
 
-const math = create(all, { number: 'number' })
+const math = create(all as Parameters<typeof create>[0], { number: 'number' })
 
 export interface UnitSpec {
   /** Multiply a value in this unit by `factor` to get SI. */

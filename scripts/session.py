@@ -3,7 +3,7 @@
 
 Three things, in this order, stopping at the first failure:
 
-  1. CONFIRM.  Run the suite, re-render the figures from the examples, take the
+  1. CONFIRM.  Typecheck, run the suite, re-render the figures from the examples, take the
      measurement the project's claims rest on, and build. A red suite, a figure that no
      longer matches its example, or an acceptance number outside tolerance exits non-zero
      HAVING WRITTEN NOTHING. A broken state must never reach the feed, because a later
@@ -65,6 +65,9 @@ def step(label: str) -> None:
 
 
 def confirm() -> dict:
+    step("types")
+    capture(["npx", "tsc", "--noEmit"])
+
     step("suite")
     p = run(["npx", "vitest", "run", "--reporter=dot"], capture_output=True)
     sys.stdout.write(p.stdout or "")

@@ -67,7 +67,7 @@ export class Tape {
   }
 
   /** Forward pass. Returns the value of every slot. */
-  forward(x: readonly number[], out?: Float64Array): Float64Array {
+  forward(x: ArrayLike<number>, out?: Float64Array): Float64Array {
     const n = this.op.length
     const v = out && out.length === n ? out : new Float64Array(n)
     for (let i = 0; i < n; i++) {
@@ -135,7 +135,7 @@ export class Tape {
   }
 
   /** Values of several outputs and the full Jacobian, in one forward and m adjoint passes. */
-  evaluate(outputs: readonly Tag[], x: readonly number[]): { f: Float64Array; J: Float64Array[] } {
+  evaluate(outputs: readonly Tag[], x: ArrayLike<number>): { f: Float64Array; J: Float64Array[] } {
     const values = this.forward(x)
     const f = new Float64Array(outputs.length)
     const J: Float64Array[] = []

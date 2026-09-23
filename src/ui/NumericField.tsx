@@ -7,6 +7,7 @@
 // handle types in the field -- literally: the drag emits the same `set-parameter`
 // operation a keystroke does.
 
+import type { JSX } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { Dim, dimToString, isDimless } from '../core/dimension.js'
 import { displayUnit, formatNumber, parseLiteral, toUnit, unit as resolveUnit } from '../core/units.js'
