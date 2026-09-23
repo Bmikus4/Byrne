@@ -10,7 +10,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   AXES, BOX_FACE_ORDER, DEFAULT_AXIS, axisDeviation, axisVector, axisView,
-  gridRotation, nearestAxis, planeNormal, planeRotation, snapInPlane, dragToOrbit,
+  gridReach, gridRotation, gridStepFor, nearestAxis, planeNormal, planeRotation,
+  snapInPlane, dragToOrbit,
 } from '../src/ui/view.js'
 
 /** Apply an XYZ Euler rotation to a vector, the way three.js does. */
@@ -97,6 +98,32 @@ describe('snapping stays in the plane', () => {
   })
 })
 
+describe('the grid is centred on the origin and its lines are where snapping is', () => {
+  it('reaches past the furthest geometry from the origin', () => {
+    // Content centred 3 m from the origin with a 1 m radius needs 4 m of grid, or the
+    // origin and the drawing are not both on screen.
+    expect(gridReach(1, 3)).toBe(4)
+    expect(gridReach(0.2, 0)).toBe(1)     // never smaller than a metre
+  })
+
+  it('keeps the drawn step on the 1-2-5 series so lines land where snapping does', () => {
+    expect(gridStepFor(1, 0.1)).toBe(0.1)
+    expect(gridStepFor(40, 0.1)).toBe(1)
+    expect(gridStepFor(400, 0.1)).toBe(10)
+    for (const r of [0.3, 1, 7, 55, 900, 12000]) {
+      const step = gridStepFor(r, 0.1)
+      expect((2 * r) / step, `radius ${r}`).toBeLessThanOrEqual(80)
+      // Every step is a 1, 2 or 5 times a power of ten, so a snapped point is on a line.
+      const lead = step / Math.pow(10, Math.floor(Math.log10(step) + 1e-9))
+      expect([1, 2, 5]).toContain(Math.round(lead))
+    }
+  })
+
+  it('never loops forever on an absurd scale', () => {
+    expect(Number.isFinite(gridStepFor(1e12, 0.1))).toBe(true)
+  })
+})
+
 describe('the navigation cube', () => {
   it('names its faces in the order three.js builds a box', () => {
     expect([...BOX_FACE_ORDER]).toEqual(['+x', '-x', '+y', '-y', '+z', '-z'])
@@ -109,4 +136,41 @@ describe('the navigation cube', () => {
     expect(a.yaw).toBeCloseTo(-b.yaw, 15)
     expect(dragToOrbit(0, 0)).toEqual({ yaw: -0, pitch: -0 })
   })
+
+  it('tips the cube towards you when you drag down', () => {
+    // The cube shows the world as the camera sees it, so it turns opposite to the camera:
+    // a downward drag must move the CAMERA up, which is a negative rotation about the
+    // camera's screen-right. Getting the axis from cross(offset, up) instead of
+    // cross(up, offset) flips this and the cube tilts the wrong way.
+    const { pitch } = dragToOrbit(0, 12)
+    expect(pitch).toBeLessThan(0)
+
+    const offset: [number, number, number] = [0, -6, 0]
+    const up: [number, number, number] = [0, 0, 1]
+    const right = cross(up, offset)
+    expect(right[0]).toBeGreaterThan(0)          // screen-right is +x from this view
+    const moved = rotateAbout(offset, normalise(right), pitch)
+    expect(moved[2]).toBeGreaterThan(0)          // the camera rises
+  })
 })
+
+function cross(a: readonly number[], b: readonly number[]): [number, number, number] {
+  return [
+    a[1]! * b[2]! - a[2]! * b[1]!,
+    a[2]! * b[0]! - a[0]! * b[2]!,
+    a[0]! * b[1]! - a[1]! * b[0]!,
+  ]
+}
+
+function normalise(v: readonly number[]): [number, number, number] {
+  const n = Math.hypot(v[0]!, v[1]!, v[2]!) || 1
+  return [v[0]! / n, v[1]! / n, v[2]! / n]
+}
+
+/** Rodrigues, matching three.js's applyAxisAngle. */
+function rotateAbout(v: readonly number[], k: readonly number[], a: number): [number, number, number] {
+  const c = Math.cos(a), s = Math.sin(a)
+  const kv = k[0]! * v[0]! + k[1]! * v[1]! + k[2]! * v[2]!
+  const kxv = cross(k, v)
+  return [0, 1, 2].map((i) => v[i]! * c + kxv[i]! * s + k[i]! * kv * (1 - c)) as [number, number, number]
+}

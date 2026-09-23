@@ -115,13 +115,47 @@ export const CUBE_FACES: readonly CubeFace[] = AXES.map((axis) => ({
 export const BOX_FACE_ORDER: readonly Axis[] = ['+x', '-x', '+y', '-y', '+z', '-z']
 
 /**
- * A drag on the cube is an orbit. Screen dx, dy in pixels become yaw about world up and
- * pitch about the camera's right, in radians, at a fixed sensitivity.
+ * A drag on the cube is an orbit: the cube follows your hand, so dragging down tips its
+ * top towards you.
+ *
+ * Both signs are negative because the CUBE shows the world as the camera sees it, so it
+ * turns opposite to the camera. The pitch axis must be the camera's screen-RIGHT
+ * (cross(up, offset)); cross(offset, up) is screen-left and silently inverts the tilt,
+ * which is the bug this comment exists to stop coming back.
  */
 export const dragToOrbit = (dx: number, dy: number): { yaw: number; pitch: number } => ({
   yaw: -dx * 0.012,
   pitch: -dy * 0.012,
 })
+
+/**
+ * A grid step from the 1-2-5 series, so the drawn lines always land on multiples of the
+ * step that snapping uses. Picking the line COUNT instead, and dividing, gives a grid
+ * whose lines are not where snapping puts things -- which looks fine and is a lie.
+ */
+export function gridStepFor(radius: number, preferred = 0.1): number {
+  const target = Math.max(1e-6, preferred)
+  let step = target
+  let guard = 0
+  while ((2 * radius) / step > 80 && guard++ < 40) step = nextStep(step)
+  return step
+}
+
+function nextStep(step: number): number {
+  const decade = Math.pow(10, Math.floor(Math.log10(step) + 1e-9))
+  const lead = Math.round(step / decade)
+  if (lead < 2) return 2 * decade
+  if (lead < 5) return 5 * decade
+  return 10 * decade
+}
+
+/**
+ * How far the grid has to reach to contain both the world origin and the content.
+ * The grid is anchored at the ORIGIN -- that is what makes it mean anything -- so the
+ * camera looks at the origin too, and the two centres are the same point on screen.
+ */
+export const gridReach = (contentRadius: number, contentCentreDistance: number): number =>
+  Math.max(1, contentRadius + contentCentreDistance)
 
 /** A drag shorter than this many pixels is a click, not an orbit. */
 export const CLICK_SLOP = 4

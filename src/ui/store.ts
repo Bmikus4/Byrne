@@ -46,6 +46,8 @@ export interface UiState {
   paletteOpen: boolean
   cursorWorld: [number, number, number] | null
   message: string | null
+  /** Bumped to ask the viewport to re-frame. A counter, so repeats still fire. */
+  fitTick: number
 
   run<A>(op: Operation<A>, args: A): void
   setSource(source: string, record?: boolean): void
@@ -53,6 +55,7 @@ export interface UiState {
   undo(): void
   redo(): void
   set<K extends keyof UiState>(key: K, value: UiState[K]): void
+  fit(): void
   loadExample(path: string): void
 }
 
@@ -78,6 +81,7 @@ export const useStore = create<UiState>((setState, get) => ({
   paletteOpen: false,
   cursorWorld: null,
   message: null,
+  fitTick: 0,
 
   run(op, args) {
     const { built } = get()
@@ -149,6 +153,8 @@ export const useStore = create<UiState>((setState, get) => ({
     }
   },
 
+  fit() { setState((s) => ({ fitTick: s.fitTick + 1 })) },
+
   loadExample(path) {
     const src = EXAMPLES[path]
     if (!src) return
@@ -158,6 +164,7 @@ export const useStore = create<UiState>((setState, get) => ({
       built: rebuild(src, LIBRARY),
       selection: [],
       message: null,
+      fitTick: s.fitTick + 1,
     }))
   },
 }))

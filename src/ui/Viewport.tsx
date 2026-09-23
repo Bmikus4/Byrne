@@ -26,7 +26,7 @@ import { useStore } from './store.js'
 import { instantiate } from './model.js'
 import {
   Axis, BOX_FACE_ORDER, CLICK_SLOP, axisView, dragToOrbit, gridRotation,
-  nearestAxis, planeNormal, snapInPlane,
+  gridReach, gridStepFor, nearestAxis, planeNormal, snapInPlane,
 } from './view.js'
 
 const GLYPH_SCALE: Array<[keyof typeof NAMED, number]> = [
@@ -82,17 +82,24 @@ export function Viewport(): JSX.Element {
   const theme = useStore((s) => s.theme)
   const snap = useStore((s) => s.snap)
   const gridStep = useStore((s) => s.gridStep)
+  const fitTick = useStore((s) => s.fitTick)
+  /** The set of objects last framed. Re-framing on a VALUE edit would fight the user. */
+  const framed = useRef('')
 
   // --- one-time setup ------------------------------------------------------
   useEffect(() => {
     const el = host.current!
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1))
+    // Every clear is explicit. With autoClear left on, the second render() of the frame
+    // clears the COLOUR buffer inside the cube's scissor rectangle -- to the renderer's
+    // clear colour, which is black -- and the cube sits in a black box.
+    renderer.autoClear = false
     renderer.setScissorTest(false)
     el.appendChild(renderer.domElement)
 
     const scene = new THREE.Scene()
-    const camera = new THREE.OrthographicCamera(-2, 2, 1.5, -1.5, -200, 200)
+    const camera = new THREE.OrthographicCamera(-2, 2, 1.5, -1.5, -500, 500)
     camera.up.set(0, 0, 1)
     camera.position.set(0, -6, 0)
 
@@ -176,7 +183,19 @@ export function Viewport(): JSX.Element {
     if (!k || !host.current) return
     const css = getComputedStyle(host.current).getPropertyValue('--canvas').trim()
     k.scene.background = new THREE.Color(css || '#ffffff')
+    // The cube draws over the scene with no colour clear of its own, so it has no
+    // background at all -- it sits on whatever is behind it.
     k.cubeScene.background = null
+    const dark = theme === 'dark'
+    const box = k.cube.getObjectByName('cube') as THREE.Mesh | undefined
+    if (box && Array.isArray(box.material)) {
+      box.material.forEach((m, i) => {
+        const mat = m as THREE.MeshBasicMaterial
+        mat.map?.dispose()
+        mat.map = faceTexture(BOX_FACE_ORDER[i]!.toUpperCase(), dark)
+        mat.needsUpdate = true
+      })
+    }
   }, [theme])
 
   // --- camera follows the view axis and the mode ---------------------------
@@ -199,8 +218,9 @@ export function Viewport(): JSX.Element {
     disposeTree(k.guides)
     k.guides.clear()
 
-    const size = Math.max(4, Math.ceil(k.radius * 2.4))
-    const divisions = Math.max(4, Math.min(120, Math.round(size / Math.max(0.05, gridStep))))
+    const step = gridStepFor(k.radius * 1.2, gridStep)
+    const size = Math.max(step * 4, Math.ceil((k.radius * 2.4) / step) * step)
+    const divisions = Math.max(4, Math.round(size / step))
     const rot = gridRotation(activePlane)
 
     if (showGrid) {
@@ -266,17 +286,38 @@ export function Viewport(): JSX.Element {
 
     drawScene(built.scene, k.content, selection)
 
+    // The grid is anchored at the world ORIGIN, because that is what makes it mean
+    // anything, so the camera looks at the origin too -- otherwise the grid's centre and
+    // the centre of the screen are two different points and the view reads as off-centre.
+    // The fit therefore has to reach from the origin out past the furthest geometry.
     const box = new THREE.Box3().setFromObject(k.content)
     if (!box.isEmpty()) {
       const sphere = box.getBoundingSphere(new THREE.Sphere())
-      k.radius = Math.max(0.5, sphere.radius)
-      k.controls.target.copy(sphere.center)
+      k.radius = gridReach(sphere.radius, sphere.center.length())
+    } else {
+      k.radius = 1.5
     }
-    const el = host.current
-    if (el) fitFrustum(k, el.clientWidth, el.clientHeight)
+
+    // Re-frame only when the OBJECTS change, not when a value does. Refitting on every
+    // keystroke would snap the view back while the user was still typing into it.
+    const signature = built.scene.geometry.map((it) => it.name).join('|')
+    if (signature !== framed.current) {
+      framed.current = signature
+      k.controls.target.set(0, 0, 0)
+      const el = host.current
+      if (el) fitFrustum(k, el.clientWidth, el.clientHeight)
+    }
 
     if (showLabels) k.labels = drawLabels(built.scene, overlay.current!)
   }, [built, selection, showLabels])
+
+  useEffect(() => {
+    const k = kit.current
+    if (!k || !host.current || fitTick === 0) return
+    k.controls.target.set(0, 0, 0)
+    k.camera.zoom = 1
+    fitFrustum(k, host.current.clientWidth, host.current.clientHeight)
+  }, [fitTick])
 
   function placeLabels(): void {
     const k = kit.current
@@ -441,7 +482,9 @@ function stepGlide(k: Kit): void {
 
 function orbit(k: Kit, yaw: number, pitch: number): void {
   const offset = k.camera.position.clone().sub(k.controls.target)
-  const right = new THREE.Vector3().crossVectors(offset, k.camera.up).normalize()
+  // cross(up, offset) is the camera's screen-RIGHT. The other order is screen-left and
+  // inverts the tilt, so dragging the cube down used to show its underside.
+  const right = new THREE.Vector3().crossVectors(k.camera.up, offset).normalize()
   offset.applyAxisAngle(new THREE.Vector3(0, 0, 1), yaw)
   offset.applyAxisAngle(right, pitch)
   k.camera.position.copy(k.controls.target).add(offset)
@@ -452,17 +495,17 @@ function orbit(k: Kit, yaw: number, pitch: number): void {
 // ---------------------------------------------------------------------------
 // The cube
 
-function faceTexture(label: string): THREE.Texture {
+function faceTexture(label: string, dark = false): THREE.Texture {
   const size = 128
   const c = document.createElement('canvas')
   c.width = c.height = size
   const g = c.getContext('2d')!
-  g.fillStyle = '#f2f2f0'
+  g.fillStyle = dark ? '#232326' : '#f4f4f2'
   g.fillRect(0, 0, size, size)
-  g.strokeStyle = '#c9c9c2'
+  g.strokeStyle = dark ? '#3a3a40' : '#cfcfc8'
   g.lineWidth = 6
   g.strokeRect(3, 3, size - 6, size - 6)
-  g.fillStyle = '#1b1b1a'
+  g.fillStyle = dark ? '#ececef' : '#1b1b1a'
   g.font = '600 46px ui-monospace, Menlo, Consolas, monospace'
   g.textAlign = 'center'
   g.textBaseline = 'middle'
@@ -472,7 +515,7 @@ function faceTexture(label: string): THREE.Texture {
   return tex
 }
 
-function buildCube(): { cubeScene: THREE.Scene; cubeCamera: THREE.OrthographicCamera; cube: THREE.Group } {
+function buildCube(dark = false): { cubeScene: THREE.Scene; cubeCamera: THREE.OrthographicCamera; cube: THREE.Group } {
   const cubeScene = new THREE.Scene()
   const cubeCamera = new THREE.OrthographicCamera(-1.35, 1.35, 1.35, -1.35, 0.1, 20)
   cubeCamera.position.set(0, 0, 5)
@@ -480,13 +523,13 @@ function buildCube(): { cubeScene: THREE.Scene; cubeCamera: THREE.OrthographicCa
 
   const cube = new THREE.Group()
   const materials = BOX_FACE_ORDER.map((axis) =>
-    new THREE.MeshBasicMaterial({ map: faceTexture(axis.toUpperCase()) }))
+    new THREE.MeshBasicMaterial({ map: faceTexture(axis.toUpperCase(), dark) }))
   const box = new THREE.Mesh(new THREE.BoxGeometry(1.35, 1.35, 1.35), materials)
   box.name = 'cube'
   cube.add(box)
   cube.add(new THREE.LineSegments(
     new THREE.EdgesGeometry(new THREE.BoxGeometry(1.36, 1.36, 1.36)),
-    new THREE.LineBasicMaterial({ color: 0x8c8c85 }),
+    new THREE.LineBasicMaterial({ color: dark ? 0x55555c : 0x8c8c85 }),
   ))
   cubeScene.add(cube)
   return { cubeScene, cubeCamera, cube }

@@ -42,6 +42,7 @@ export function App(): JSX.Element {
       if (e.key === 'g') set('showGrid', !useStore.getState().showGrid)
       if (e.key === 'a') set('showAxes', !useStore.getState().showAxes)
       if (e.key === 'l') set('showLabels', !useStore.getState().showLabels)
+      if (e.key === 'f') useStore.getState().fit()
       if (e.key === '2') set('mode', '2d')
       if (e.key === '3') set('mode', '3d')
       if (e.key === 'b') set('theme', useStore.getState().theme === 'light' ? 'dark' : 'light')
