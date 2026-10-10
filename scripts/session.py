@@ -156,6 +156,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("-m", "--message", required=True, help="commit subject, <= 80 chars")
     ap.add_argument("--headline", help="feed headline; defaults to the subject")
+    ap.add_argument("-F", "--body-file", help="commit body: what was broken, what happens now, and why")
     ap.add_argument("--no-push", action="store_true")
     ap.add_argument("--dry-run", action="store_true", help="confirm and measure only")
     args = ap.parse_args()
@@ -181,11 +182,16 @@ def main() -> int:
 
     print("\nCOMMIT")
     run(["git", "add", "-A"])
+    written = ""
+    if args.body_file:
+        with open(args.body_file, encoding="utf-8") as fh:
+            written = fh.read().strip() + "\n\n"
     body = (
+        written +
         f"{entry['headline']}\n\n"
         f"Ticket {entry['id']}. {entry['tests']} tests. "
         f"Worst relative error against the closed forms {entry['worstRelativeError']:.3e}.\n\n"
-        "Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
+        "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
     )
     p = run(["git", "commit", "-m", args.message, "-m", body], capture_output=True)
     sys.stdout.write(p.stdout or "")

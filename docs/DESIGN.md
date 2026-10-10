@@ -1080,7 +1080,8 @@ without a ticket explaining it is a regression.
 
 ## 13. Status matrix
 
-Phases 2 to 4 are built. 165 automated tests; `npm test`.
+Phases 2 to 4 are built, and the 2D chart editor. `npm test` runs the suite; every ticket in
+`public/data/feed.json` carries the count it ran.
 
 | Feature | Status | Evidence |
 |---|---|---|
@@ -1128,6 +1129,10 @@ Phases 2 to 4 are built. 165 automated tests; `npm test`.
 | Electron packaging | planned | the same bundle runs in a browser today |
 | Hidden-line removal beyond depth sort | planned | §10 risk 1 stands |
 | Object-to-object drop as an operation | partial | operations exist; the viewport drop path is palette-only |
+| 2D chart editor (`chart.html`): tools, snapping, handles, inspector | implemented, tested, **observed** | `test/chart.test.ts`; driven in a browser and screenshotted, 2026-10-10 |
+| Kepler orbits: every conic, Kepler's equation, equal-time marks | implemented, tested | `test/chart.test.ts` (vis-viva, Kepler II, one-period return) |
+| Formula curves through the sandboxed evaluator | implemented, tested | `test/chart.test.ts` |
+| Charts I-III as editable templates | implemented, tested | `test/chart.test.ts`; rebuilt from `theory/charts/*.tex` |
 
 **Measured, by `scripts/measure.mjs` and carried in every ticket:**
 

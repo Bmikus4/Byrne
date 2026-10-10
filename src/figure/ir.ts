@@ -29,7 +29,7 @@ export type Prim =
   | { readonly kind: 'ellipse'; readonly c: Pt; readonly rx: number; readonly ry: number; readonly rot: number; readonly style: Style; readonly depth: number; readonly id: string }
   | { readonly kind: 'arc'; readonly c: Pt; readonly r: number; readonly a0: number; readonly a1: number; readonly style: Style; readonly depth: number; readonly id: string }
   | { readonly kind: 'cubic'; readonly pts: readonly Pt[]; readonly style: Style; readonly depth: number; readonly id: string }
-  | { readonly kind: 'label'; readonly at: Pt; readonly latex: string; readonly anchorX: number; readonly anchorY: number; readonly fontSize: number; readonly style: Style; readonly depth: number; readonly id: string }
+  | { readonly kind: 'label'; readonly at: Pt; readonly latex: string; readonly anchorX: number; readonly anchorY: number; readonly fontSize: number; readonly baseline?: boolean; readonly style: Style; readonly depth: number; readonly id: string }
 
 export interface Figure {
   /** Page box in points. */

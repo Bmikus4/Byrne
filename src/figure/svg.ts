@@ -1,7 +1,7 @@
 // SVG serialiser. Generated from the Figure IR, never from a screen.
 
 import { Figure, Prim, Pt, Style } from './ir.js'
-import { EX_IN_POINTS, escapeXml, plain, typeset } from './labels.js'
+import { escapeXml, placeLabel, plain, typeset } from './labels.js'
 
 export interface SvgOptions {
   /**
@@ -13,6 +13,8 @@ export interface SvgOptions {
   readonly labels?: 'outlines' | 'text'
   readonly background?: string | null
   readonly includeCaveats?: boolean
+  /** Tag every element with its primitive's id, so an editor can tell what was clicked. */
+  readonly ids?: boolean
 }
 
 const n = (x: number): string => {
@@ -37,6 +39,7 @@ export function toSvg(fig: Figure, opts: SvgOptions = {}): string {
   let needsArrow = false
 
   for (const p of fig.prims) {
+    const first = body.length
     switch (p.kind) {
       case 'line': {
         if (p.style.arrowHead) needsArrow = true
@@ -69,6 +72,11 @@ export function toSvg(fig: Figure, opts: SvgOptions = {}): string {
       case 'label':
         body.push(label(p, mode))
         break
+    }
+    if (opts.ids) {
+      for (let i = first; i < body.length; i++) {
+        body[i] = body[i]!.replace(/^<(\w+)/, `<$1 data-id="${escapeXml(p.id)}"`)
+      }
     }
   }
 
@@ -104,20 +112,16 @@ function label(p: Extract<Prim, { kind: 'label' }>, mode: 'outlines' | 'text'): 
       `${escapeXml(plain(p.latex))}</text>`
   }
   const t = typeset(p.latex)
-  const w = t.widthEx * EX_IN_POINTS
-  const h = t.heightEx * EX_IN_POINTS
-  const gap = 4
-  const x = p.at[0] + p.anchorX * gap - (p.anchorX > 0.2 ? 0 : p.anchorX < -0.2 ? w : w / 2)
-  const y = p.at[1] - p.anchorY * gap - (p.anchorY > 0.2 ? h : p.anchorY < -0.2 ? 0 : h / 2)
   const inner = t.svg
     .replace(/^<svg[^>]*>/, '')
     .replace(/<\/svg>\s*$/, '')
-  const vb = /viewBox="([-\d.\s]+)"/.exec(t.svg)
-  if (!vb) return `<g transform="translate(${n(x)} ${n(y)})">${inner}</g>`
-  const [vx, vy, vw, vh] = vb[1]!.trim().split(/\s+/).map(Number) as [number, number, number, number]
+  const box = placeLabel(p, t)
+  if (!box) return `<g transform="translate(${n(p.at[0])} ${n(p.at[1])})">${inner}</g>`
+  const { x, y, w, vb: [vx, vy, vw] } = box
   const s = w / vw
-  // MathJax's y axis points up; ours points down, so the glyph group is flipped.
-  return `<g transform="translate(${n(x)} ${n(y + h)}) scale(${n(s)} ${n(-s)}) translate(${n(-vx)} ${n(-vy - vh)})" ` +
+  // MathJax's inner group already carries scale(1,-1), so its viewBox is y-down like ours:
+  // map it onto the box with no further flip. A second flip drew every label upside down.
+  return `<g transform="translate(${n(x)} ${n(y)}) scale(${n(s)}) translate(${n(-vx)} ${n(-vy)})" ` +
     `fill="${p.style.stroke}" stroke="none">${inner}</g>`
 }
 

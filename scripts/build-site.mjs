@@ -136,6 +136,7 @@ figure { margin: 0; }
   <div class="brand">Byrne</div>
   <div class="sub">physics diagrams</div>
   <a href="./app/">Open the application</a>
+  <a href="./app/chart.html">Open the chart editor</a>
   <a href="#figures">Figures</a>
   <a href="https://github.com/Bmikus4/Byrne">Source</a>
   <div class="navgroup">Design document</div>
@@ -150,6 +151,7 @@ output generated from the model rather than captured from the screen.</p>
 
 <div class="cta">
   <a class="primary" href="./app/">Open the application</a>
+  <a class="primary" href="./app/chart.html">Open the chart editor</a>
   <a href="#figures">See the exported figures</a>
   <a href="https://github.com/Bmikus4/Byrne">Source on GitHub</a>
 </div>

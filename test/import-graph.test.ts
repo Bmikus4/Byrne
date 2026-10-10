@@ -46,13 +46,16 @@ const FORBIDDEN_GLOBALS = [
 describe('the core is a model, not an application', () => {
   const core = sources(join(ROOT, 'src/core'))
   const figure = sources(join(ROOT, 'src/figure'))
+  // The chart model renders straight into the figure IR, so it is held to the same rule:
+  // a chart can be exported headless, and the canvas cannot leak into the file.
+  const chart = sources(join(ROOT, 'src/chart'))
 
   it('has files to check', () => {
     expect(core.length).toBeGreaterThan(8)
     expect(figure.length).toBeGreaterThan(4)
   })
 
-  it.each([...core, ...figure])('$path imports nothing that touches a machine', ({ path, text }) => {
+  it.each([...core, ...figure, ...chart])('$path imports nothing that touches a machine', ({ path, text }) => {
     for (const spec of importsOf(text)) {
       for (const bad of FORBIDDEN_MODULES) {
         expect(bad.test(spec), `${path} imports ${spec}`).toBe(false)
@@ -60,7 +63,7 @@ describe('the core is a model, not an application', () => {
     }
   })
 
-  it.each([...core, ...figure])('$path reaches no host global', ({ path, text }) => {
+  it.each([...core, ...figure, ...chart])('$path reaches no host global', ({ path, text }) => {
     // Comments are stripped first: the rule is about what the code does, and the
     // explanations of it necessarily name the things it must not touch.
     const code = text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|\s)\/\/[^\n]*/g, '')

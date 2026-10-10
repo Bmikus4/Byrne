@@ -125,3 +125,41 @@ export function escapeXml(s: string): string {
 }
 
 export const EX_IN_POINTS = EX
+
+/** MathJax runs with em = 16, so a label's fontSize (its em, in points) scales from that. */
+export const EM_IN_POINTS = 16
+
+export interface LabelPlacement {
+  /** Top-left of the typeset box, and its size, in figure points. */
+  readonly x: number
+  readonly y: number
+  readonly w: number
+  readonly h: number
+  /** MathJax's viewBox: x, y, width, height. Its y = 0 is the text baseline. */
+  readonly vb: readonly [number, number, number, number]
+}
+
+/**
+ * Where a label's typeset box goes. One function for SVG and PDF so the two cannot place
+ * the same label differently. A `baseline` label puts its baseline on `at` and centres
+ * horizontally, which is what keeps stacked lines on an even rhythm whatever their
+ * ascenders and subscripts do.
+ */
+export function placeLabel(
+  p: { at: readonly [number, number]; anchorX: number; anchorY: number; fontSize: number; baseline?: boolean },
+  t: Typeset,
+): LabelPlacement | undefined {
+  const vbm = /viewBox="([-\d.\s]+)"/.exec(t.svg)
+  if (!vbm) return undefined
+  const vb = vbm[1]!.trim().split(/\s+/).map(Number) as [number, number, number, number]
+  const k = p.fontSize / EM_IN_POINTS
+  const w = t.widthEx * EX * k
+  const h = t.heightEx * EX * k
+  if (p.baseline) {
+    return { x: p.at[0] - w / 2, y: p.at[1] - h * (-vb[1] / vb[3]), w, h, vb }
+  }
+  const gap = 4
+  const x = p.at[0] + p.anchorX * gap - (p.anchorX > 0.2 ? 0 : p.anchorX < -0.2 ? w : w / 2)
+  const y = p.at[1] - p.anchorY * gap - (p.anchorY > 0.2 ? h : p.anchorY < -0.2 ? 0 : h / 2)
+  return { x, y, w, h, vb }
+}

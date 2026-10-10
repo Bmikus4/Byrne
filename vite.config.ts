@@ -19,6 +19,9 @@ export default defineConfig({
     target: 'es2022',
     chunkSizeWarningLimit: 3000,
     rollupOptions: {
+      // Two pages from one bundle graph: the 3D editor and the 2D chart editor share the
+      // figure pipeline, so a fix to an exporter reaches both.
+      input: { main: 'index.html', chart: 'chart.html' },
       output: {
         // MathJax (~1.5 MB) and three are the two heavyweights; split them off so a
         // change to the model does not invalidate them in the browser cache.

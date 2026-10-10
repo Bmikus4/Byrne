@@ -6,7 +6,7 @@
 
 import { PDFDocument, rgb, PDFPage } from 'pdf-lib'
 import { Figure, Prim, Pt, Style } from './ir.js'
-import { EX_IN_POINTS, typeset } from './labels.js'
+import { placeLabel, typeset } from './labels.js'
 import { IDENTITY, Matrix, flattenSvg, matMul } from './svgpath.js'
 
 export interface PdfOptions {
@@ -54,68 +54,92 @@ function draw(
   page: PDFPage, p: Prim,
   P: (p: Pt) => { x: number; y: number }, Y: (y: number) => number, fig: Figure,
 ): void {
-  const s: Style = p.kind === 'label' ? p.style : p.style
+  const s: Style = p.style
   const stroke = color(s.stroke)
   const thickness = s.weight ?? 1
+  const noStroke = s.stroke === 'none' || thickness <= 0
+  // Shapes go through drawSvgPath in figure coordinates (y down, origin top-left), which
+  // is pdf-lib's own convention for that call when placed at the page's top edge. One
+  // path builder per shape, shared with nothing else, so fills, dashes and rotation are
+  // the same PDF operators for every kind.
+  const shape = (d: string, closed: boolean): void => {
+    const fill = closed && s.fill && s.fill !== 'none' ? color(s.fill) : undefined
+    page.drawSvgPath(d, {
+      x: 0, y: fig.height, scale: 1,
+      color: fill,
+      borderColor: noStroke ? undefined : stroke,
+      borderWidth: noStroke ? 0 : thickness,
+      borderDashArray: s.dash?.length ? [...s.dash] : undefined,
+      borderLineCap: 1,
+      opacity: s.opacity, borderOpacity: s.opacity,
+    })
+  }
+  const f = (x: number): string => String(Math.round(x * 1000) / 1000)
   switch (p.kind) {
     case 'line': {
-      page.drawLine({ start: P(p.a), end: P(p.b), thickness, color: stroke })
+      if (noStroke) break
+      page.drawLine({
+        start: P(p.a), end: P(p.b), thickness, color: stroke, opacity: s.opacity,
+        dashArray: s.dash?.length ? [...s.dash] : undefined, lineCap: 1,
+      })
       if (s.arrowHead) arrowHead(page, p.a, p.b, stroke, thickness, Y)
       break
     }
-    case 'polyline': {
-      const pts = p.closed ? [...p.pts, p.pts[0]!] : p.pts
-      for (let i = 1; i < pts.length; i++) {
-        page.drawLine({ start: P(pts[i - 1]!), end: P(pts[i]!), thickness, color: stroke })
-      }
+    case 'polyline':
+      shape(`M ${p.pts.map((q) => `${f(q[0])} ${f(q[1])}`).join(' L ')}${p.closed ? ' Z' : ''}`, p.closed)
+      break
+    case 'circle': {
+      const [cx, cy] = p.c
+      shape(`M ${f(cx - p.r)} ${f(cy)} A ${f(p.r)} ${f(p.r)} 0 1 0 ${f(cx + p.r)} ${f(cy)} ` +
+        `A ${f(p.r)} ${f(p.r)} 0 1 0 ${f(cx - p.r)} ${f(cy)} Z`, true)
       break
     }
-    case 'circle':
-      page.drawCircle({ ...P(p.c), size: p.r, borderWidth: thickness, borderColor: stroke })
+    case 'ellipse': {
+      // The IR's rotation is in the y-down figure frame, which is the frame the path is in.
+      const c = Math.cos(p.rot), sn = Math.sin(p.rot)
+      const a: Pt = [p.c[0] - p.rx * c, p.c[1] - p.rx * sn]
+      const b: Pt = [p.c[0] + p.rx * c, p.c[1] + p.rx * sn]
+      const deg = f((p.rot * 180) / Math.PI)
+      shape(`M ${f(a[0])} ${f(a[1])} A ${f(p.rx)} ${f(p.ry)} ${deg} 1 0 ${f(b[0])} ${f(b[1])} ` +
+        `A ${f(p.rx)} ${f(p.ry)} ${deg} 1 0 ${f(a[0])} ${f(a[1])} Z`, true)
       break
-    case 'ellipse':
-      page.drawEllipse({
-        ...P(p.c), xScale: p.rx, yScale: p.ry, borderWidth: thickness, borderColor: stroke,
-      })
-      break
+    }
     case 'arc': {
       // Sampled here, and only here: PDF has no arc operator, only Beziers, and a
       // 64-segment polyline of a 0.45 m arc is under a tenth of a point of chord error.
       const steps = 64
-      let prev: Pt = [p.c[0] + p.r * Math.cos(p.a0), p.c[1] - p.r * Math.sin(p.a0)]
-      for (let i = 1; i <= steps; i++) {
-        const a = p.a0 + ((p.a1 - p.a0) * i) / steps
-        const cur: Pt = [p.c[0] + p.r * Math.cos(a), p.c[1] - p.r * Math.sin(a)]
-        page.drawLine({ start: P(prev), end: P(cur), thickness, color: stroke })
-        prev = cur
+      const pts: Pt[] = []
+      for (let i = 0; i <= steps; i++) {
+        const ang = p.a0 + ((p.a1 - p.a0) * i) / steps
+        pts.push([p.c[0] + p.r * Math.cos(ang), p.c[1] - p.r * Math.sin(ang)])
       }
+      shape(`M ${pts.map((q) => `${f(q[0])} ${f(q[1])}`).join(' L ')}`, false)
       break
     }
-    case 'cubic':
-      for (let i = 1; i < p.pts.length; i++) {
-        page.drawLine({ start: P(p.pts[i - 1]!), end: P(p.pts[i]!), thickness, color: stroke })
+    case 'cubic': {
+      if (p.pts.length < 4) break
+      const out = [`M ${f(p.pts[0]![0])} ${f(p.pts[0]![1])}`]
+      for (let i = 1; i + 2 < p.pts.length; i += 3) {
+        out.push(`C ${[p.pts[i]!, p.pts[i + 1]!, p.pts[i + 2]!].map((q) => `${f(q[0])} ${f(q[1])}`).join(' ')}`)
       }
+      shape(out.join(' '), true)
       break
+    }
     case 'label': {
       const t = typeset(p.latex)
       if (t.fallback) {
         page.drawText(p.latex, { x: p.at[0], y: Y(p.at[1]), size: p.fontSize, color: stroke })
         break
       }
-      const vb = /viewBox="([-\d.\s]+)"/.exec(t.svg)
-      if (!vb) break
-      const [vx, vy, vw, vh] = vb[1]!.trim().split(/\s+/).map(Number) as [number, number, number, number]
-      const w = t.widthEx * EX_IN_POINTS
-      const h = t.heightEx * EX_IN_POINTS
+      const box = placeLabel(p, t)
+      if (!box) break
+      const { x, y: yTop, w, vb: [vx, vy, vw] } = box
       const scale = w / vw
-      const gap = 4
-      const x = p.at[0] + p.anchorX * gap - (p.anchorX > 0.2 ? 0 : p.anchorX < -0.2 ? w : w / 2)
-      const yTop = p.at[1] - p.anchorY * gap - (p.anchorY > 0.2 ? h : p.anchorY < -0.2 ? 0 : h / 2)
-      // MathJax's y axis already points up, which is PDF's convention, so no flip here.
-      const base: Matrix = matMul(
-        [scale, 0, 0, scale, x - vx * scale, Y(yTop + h) - vy * scale],
-        IDENTITY,
-      )
+      // Glyphs are placed in FIGURE coordinates (y down, the frame MathJax's viewBox is in
+      // once its inner scale(1,-1) is applied), because drawSvgPath at the page's top edge
+      // makes the one flip to PDF space. Converting to PDF space here as well drew every
+      // label mirrored top-to-bottom about the page.
+      const base: Matrix = matMul([scale, 0, 0, scale, x - vx * scale, yTop - vy * scale], IDENTITY)
       for (const path of flattenSvg(t.svg, base)) {
         page.drawSvgPath(path.d, { color: stroke, borderWidth: 0, x: 0, y: fig.height, scale: 1 })
       }

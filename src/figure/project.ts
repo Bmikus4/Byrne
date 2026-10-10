@@ -232,6 +232,9 @@ const ANCHORS: Record<string, [number, number]> = {
   'right': [1, 0], 'tip': [0.6, 0.6], 'mid': [0.5, 0.5], 'arc-mid': [1, 0.4], 'auto': [0.5, 0.5],
 }
 
+// The size labels have always been drawn at: MathJax's em, before the IR honoured fontSize.
+const LABEL_EM = 16
+
 function emitLabels(scene: Scene, cam: Camera, glyph: Record<string, number>, out: Prim[]): void {
   for (const l of scene.labels) {
     const anchor = ANCHORS[l.anchor] ?? ANCHORS.auto!
@@ -239,7 +242,7 @@ function emitLabels(scene: Scene, cam: Camera, glyph: Record<string, number>, ou
     if (!at) continue
     out.push({
       kind: 'label', at: px(cam, at), latex: l.latex,
-      anchorX: anchor[0], anchorY: anchor[1], fontSize: 11,
+      anchorX: anchor[0], anchorY: anchor[1], fontSize: LABEL_EM,
       style: { stroke: colorOf('ink') }, depth: -Infinity, id: `label/${l.target}`,
     })
   }

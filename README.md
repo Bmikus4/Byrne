@@ -19,6 +19,15 @@ with an interaction script per acceptance example, dependency licences, and the 
 
 The status matrix at §13 reads `planned` for every line of code.
 
+## The chart editor
+
+`/app/chart.html` is a 2D editor for diagram-charts of the kind in the Fundamental Unit of
+Experience work: discs, crowding rings, poles, wavy geodesics, labels with LaTeX, boxed
+notes, tick strings, formula curves (y = f(x), parametric, polar) and exact two-body Kepler
+orbits you reshape by dragging the satellite or its velocity. Everything snaps to a square
+or circular grid. It draws through the same figure pipeline as the 3D editor, so PNG, SVG,
+PDF and TikZ exports are the picture on screen. Charts I, II and III open as templates.
+
 ## The deployed page
 
 `npm run build` renders `docs/DESIGN.md` to `dist/index.html`. That is all the web

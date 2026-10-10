@@ -5,14 +5,22 @@
 // paper whose other figures are TikZ. What is and is not exported is stated in the file's
 // own header, so the reader of the .tex finds out from the file rather than from a
 // changelog.
+//
+// Widths are the IR's points, unscaled. An earlier version multiplied them by 0.4, which
+// drew every TikZ line at two fifths of the width the SVG and PDF drew it.
 
-import { Figure, Prim, Pt } from './ir.js'
+import { Figure, Prim, Pt, Style } from './ir.js'
 import { plain } from './labels.js'
 
-const n = (x: number): string => String(Math.round(x * 1000) / 1000)
+const n = (x: number): string => {
+  const r = Math.round(x * 1000) / 1000
+  return Object.is(r, -0) ? '0' : String(r)
+}
+
+const CM = 28.3465
 
 /** Points to TikZ centimetres, with y flipped back to a mathematical axis. */
-const P = (p: Pt, h: number): string => `(${n(p[0] / 28.3465)},${n((h - p[1]) / 28.3465)})`
+const P = (p: Pt, h: number): string => `(${n(p[0] / CM)},${n((h - p[1]) / CM)})`
 
 export interface TikzOptions {
   /** Named parameters to emit as \pgfmathsetmacro so the reader can vary the figure. */
@@ -42,19 +50,13 @@ export function toTikz(fig: Figure, opts: TikzOptions = {}): string {
   out.push('')
 
   if (opts.standalone) {
-    out.push('\\documentclass[tikz,border=2pt]{standalone}', '\\usetikzpicture', '\\begin{document}')
+    out.push(
+      '\\documentclass[tikz,border=2pt]{standalone}',
+      '\\usepackage{amsmath,amssymb}',
+      '\\usetikzlibrary{arrows.meta}',
+      '\\begin{document}',
+    )
   }
-
-  out.push('\\tikzset{')
-  out.push('  byrne force/.style={draw=byrneforce, line width=0.4pt, -{Stealth[length=2mm]}},')
-  out.push('  byrne structure/.style={draw=byrnestructure, line width=0.4pt},')
-  out.push('  byrne guide/.style={draw=byrneguide, line width=0.3pt, dashed},')
-  out.push('}')
-  out.push('\\definecolor{byrneforce}{HTML}{C0392B}')
-  out.push('\\definecolor{byrnestructure}{HTML}{2B2B28}')
-  out.push('\\definecolor{byrneguide}{HTML}{9A9A93}')
-  out.push('\\definecolor{byrnefield}{HTML}{8E44AD}')
-  out.push('')
 
   for (const p of opts.parameters ?? []) {
     out.push(`\\pgfmathsetmacro{\\${p.name.replace(/[^A-Za-z]/g, '')}}{${p.value}}`)
@@ -62,55 +64,80 @@ export function toTikz(fig: Figure, opts: TikzOptions = {}): string {
   if (opts.parameters?.length) out.push('')
 
   out.push('\\begin{tikzpicture}')
-  for (const p of fig.prims) out.push('  ' + prim(p, fig.height))
+  for (const p of fig.prims) {
+    const line = prim(p, fig.height)
+    if (line) out.push('  ' + line)
+  }
   out.push('\\end{tikzpicture}')
   if (opts.standalone) out.push('\\end{document}')
   return out.join('\n') + '\n'
 }
 
-function opt(p: Prim): string {
-  const s = p.style
-  const bits = [`draw={rgb,255:red,${hex(s.stroke, 0)};green,${hex(s.stroke, 1)};blue,${hex(s.stroke, 2)}}`]
-  bits.push(`line width=${n((s.weight ?? 1) * 0.4)}pt`)
+function rgb(color: string | undefined): string | undefined {
+  const m = /^#([0-9a-f]{6})$/i.exec(color ?? '')
+  if (!m) return undefined
+  const v = m[1]!
+  return `{rgb,255:red,${parseInt(v.slice(0, 2), 16)};green,${parseInt(v.slice(2, 4), 16)};blue,${parseInt(v.slice(4, 6), 16)}}`
+}
+
+function opt(s: Style, closed: boolean): string | undefined {
+  const bits: string[] = []
+  const stroke = s.stroke === 'none' || (s.weight ?? 1) <= 0 ? undefined : rgb(s.stroke ?? '#1b1b1a') ?? rgb('#1b1b1a')
+  const fill = closed && s.fill && s.fill !== 'none' ? rgb(s.fill) : undefined
+  if (!stroke && !fill) return undefined
+  if (stroke) bits.push(`draw=${stroke}`, `line width=${n(s.weight ?? 1)}pt`)
+  else bits.push('draw=none')
+  if (fill) bits.push(`fill=${fill}`)
   if (s.arrowHead) bits.push('-{Stealth[length=2mm]}')
-  if (s.fill && s.fill !== 'none') bits.push('fill opacity=0.06, fill=black')
-  if (s.dash?.length) bits.push('dashed')
+  if (s.dash?.length) bits.push(`dash pattern=on ${n(s.dash[0]!)}pt off ${n(s.dash[1] ?? s.dash[0]!)}pt`, 'line cap=round')
+  if (s.opacity !== undefined && s.opacity < 1) bits.push(`opacity=${n(s.opacity)}`)
   return `[${bits.join(', ')}]`
 }
 
-function hex(color: string | undefined, channel: number): number {
-  const c = color ?? '#1b1b1a'
-  const m = /^#([0-9a-f]{6})$/i.exec(c)
-  if (!m) return 0
-  return parseInt(m[1]!.slice(channel * 2, channel * 2 + 2), 16)
-}
-
-function prim(p: Prim, h: number): string {
+function prim(p: Prim, h: number): string | undefined {
+  if (p.kind === 'label') {
+    // The LaTeX goes through verbatim: this is the one format where a label is already
+    // in its final language.
+    const anchor = p.baseline ? 'base' : anchorName(p.anchorX, p.anchorY)
+    const extra: string[] = []
+    const c = rgb(p.style.stroke)
+    if (c) extra.push(`text=${c}`)
+    extra.push(`font=\\fontsize{${n(p.fontSize)}}{${n(p.fontSize * 1.2)}}\\selectfont`)
+    if (p.baseline) extra.push('inner sep=0pt')
+    return `\\node[anchor=${anchor}, ${extra.join(', ')}] at ${P(p.at, h)} {$${p.latex}$};`
+  }
+  const o = opt(p.style, p.kind === 'circle' || p.kind === 'ellipse' || (p.kind === 'polyline' && p.closed) || p.kind === 'cubic')
+  if (!o) return undefined
+  const cmd = o.includes('draw=none') ? '\\fill' : '\\draw'
+  const oo = cmd === '\\fill' ? o.replace('draw=none, ', '').replace(', draw=none', '') : o
   switch (p.kind) {
     case 'line':
-      return `\\draw${opt(p)} ${P(p.a, h)} -- ${P(p.b, h)};`
+      return `${cmd}${oo} ${P(p.a, h)} -- ${P(p.b, h)};`
     case 'polyline':
-      return `\\draw${opt(p)} ${p.pts.map((q) => P(q, h)).join(' -- ')}${p.closed ? ' -- cycle' : ''};`
+      return `${cmd}${oo} ${p.pts.map((q) => P(q, h)).join(' -- ')}${p.closed ? ' -- cycle' : ''};`
     case 'circle':
-      return `\\draw${opt(p)} ${P(p.c, h)} circle [radius=${n(p.r / 28.3465)}];`
+      return `${cmd}${oo} ${P(p.c, h)} circle [radius=${n(p.r / CM)}];`
     case 'ellipse':
-      return `\\draw${opt(p)} ${P(p.c, h)} ellipse [x radius=${n(p.rx / 28.3465)}, y radius=${n(p.ry / 28.3465)}, rotate=${n((p.rot * 180) / Math.PI)}];`
+      // The IR rotates in its y-down frame; TikZ's frame is y-up, so the sense flips.
+      return `${cmd}${oo} ${P(p.c, h)} ellipse [x radius=${n(p.rx / CM)}, y radius=${n(p.ry / CM)}, rotate=${n((-p.rot * 180) / Math.PI)}];`
     case 'arc': {
       const a0 = (p.a0 * 180) / Math.PI
       const a1 = (p.a1 * 180) / Math.PI
       const start: Pt = [p.c[0] + p.r * Math.cos(p.a0), p.c[1] - p.r * Math.sin(p.a0)]
-      return `\\draw${opt(p)} ${P(start, h)} arc [start angle=${n(a0)}, end angle=${n(a1)}, radius=${n(p.r / 28.3465)}];`
+      return `${cmd}${oo} ${P(start, h)} arc [start angle=${n(a0)}, end angle=${n(a1)}, radius=${n(p.r / CM)}];`
     }
-    case 'cubic':
-      return `\\draw${opt(p)} ${p.pts.map((q) => P(q, h)).join(' .. controls .. ')};`
-    case 'label':
-      // The LaTeX goes through verbatim: this is the one format where a label is already
-      // in its final language.
-      return `\\node[anchor=${anchor(p.anchorX, p.anchorY)}] at ${P(p.at, h)} {$${p.latex}$};`
+    case 'cubic': {
+      if (p.pts.length < 4) return undefined
+      const parts = [P(p.pts[0]!, h)]
+      for (let i = 1; i + 2 < p.pts.length; i += 3) {
+        parts.push(`.. controls ${P(p.pts[i]!, h)} and ${P(p.pts[i + 1]!, h)} .. ${P(p.pts[i + 2]!, h)}`)
+      }
+      return `${cmd}${oo} ${parts.join(' ')};`
+    }
   }
 }
 
-function anchor(x: number, y: number): string {
+function anchorName(x: number, y: number): string {
   const v = y > 0.2 ? 'south' : y < -0.2 ? 'north' : ''
   const hz = x > 0.2 ? 'west' : x < -0.2 ? 'east' : ''
   return `${v}${v && hz ? ' ' : ''}${hz}` || 'center'
