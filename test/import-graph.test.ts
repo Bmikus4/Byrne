@@ -76,7 +76,9 @@ describe('the core is a model, not an application', () => {
     const all = sources(join(ROOT, 'src/figure'))
       .map((f) => f.text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|\s)\/\/[^\n]*/g, ''))
       .join('\n')
-    expect(all).not.toMatch(/canvas|toDataURL|ImageData|putImageData|drawImage/i)
+    // pdf-lib's page.drawImage is allowed: it places encoded PNG/JPEG bytes the author
+    // supplied, and rasterises nothing. A canvas's drawImage is still caught.
+    expect(all).not.toMatch(/canvas|toDataURL|ImageData|putImageData|(?<!page\.)drawImage/i)
   })
 
   it('confines filesystem access to src/io', () => {

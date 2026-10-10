@@ -4,6 +4,8 @@
 // centimetres; a template copied out of a .tex keeps its numbers. Everything here is plain
 // data so a document survives JSON, localStorage and undo by structural copy.
 
+import type { Palette } from './field.js'
+
 export type Vec = [number, number]
 
 export type Dash = 'solid' | 'dashed' | 'dotted'
@@ -61,6 +63,14 @@ export type Obj =
     showApsides: boolean; showRadius: boolean; marks: number; spokes: boolean
     bodyColor: string; satColor: string; reach: number
   }
+  // color/width are the rim. flow moves the crests one per `period` seconds.
+  | Base & {
+    type: 'field'; c: Vec; r: number; ratio: number; pockets: number; strength: number; twist: number
+    seed: number; palette: Palette; poles: boolean; geometry: boolean; slice: boolean; sliceAngle: number
+    sites: number; flow: 'in' | 'out' | 'still'; period: number; detail: number
+  }
+  // at is the centre; src a data: URL (PNG or JPEG); w and h in cm.
+  | Base & { type: 'image'; at: Vec; w: number; h: number; src: string }
 
 export type ObjType = Obj['type']
 export type ObjOf<T extends ObjType> = Extract<Obj, { type: T }>
@@ -144,6 +154,8 @@ export const TYPE_NAMES: Record<ObjType, string> = {
   curve: 'Formula curve',
   path: 'Drawn curve',
   orbit: 'Orbit',
+  field: 'Heatmap',
+  image: 'Picture',
 }
 
 /** A fresh object of each kind, at a point, with defaults chosen to look right at once. */
@@ -186,6 +198,12 @@ export function make(type: ObjType, at: Vec, extra: Partial<Obj> = {}): Obj {
       showApsides: false, showRadius: false, marks: 0, spokes: false,
       bodyColor: COLORS.source, satColor: COLORS.ink, reach: 12,
     }; break
+    case 'field': o = {
+      ...base, ...look({ color: '#c8501e', width: 2.4 }), type, c: at, r: 4, ratio: 1.45, pockets: 4,
+      strength: 0.85, twist: 55, seed: 7, palette: 'jet', poles: false, geometry: true, slice: true,
+      sliceAngle: 90, sites: 32, flow: 'in', period: 4, detail: 360,
+    }; break
+    case 'image': o = { ...base, ...look({ width: 0 }), type, at, w: 6, h: 4, src: '' }; break
   }
   return { ...o, ...extra } as Obj
 }
@@ -260,15 +278,31 @@ export function handles(o: Obj): Handle[] {
         { key: 'at', at: o.at, role: 'shape', hint: 'satellite' },
         { key: 'vel', at: add(o.at, [o.vel[0] * o.arrowScale, o.vel[1] * o.arrowScale]), role: 'shape', hint: 'velocity' },
       ]
+    case 'field':
+      return [
+        { key: 'c', at: o.c, role: 'move', hint: 'centre' },
+        { key: 'r', at: [o.c[0] + o.r, o.c[1]], role: 'shape', hint: 'radius' },
+      ]
+    case 'image':
+      return [
+        { key: 'at', at: o.at, role: 'move', hint: 'centre' },
+        { key: 'size', at: [o.at[0] + o.w / 2, o.at[1] - o.h / 2], role: 'shape', hint: 'size' },
+      ]
   }
 }
 
 /** Move one handle to a world point. Returns a new object; the input is not touched. */
 export function setHandle(o: Obj, key: string, p: Vec): Obj {
   switch (o.type) {
-    case 'circle': case 'band': case 'rings':
+    case 'circle': case 'band': case 'rings': case 'field':
       if (key === 'c') return { ...o, c: p }
       return { ...o, r: Math.max(0.01, len(sub(p, o.c))) }
+    case 'image': {
+      if (key === 'at') return { ...o, at: p }
+      // The corner keeps the picture's proportions: a stretched photograph is never wanted.
+      const w = Math.max(0.2, 2 * Math.max(Math.abs(p[0] - o.at[0]), (Math.abs(p[1] - o.at[1]) * o.w) / o.h))
+      return { ...o, w, h: (w * o.h) / o.w }
+    }
     case 'line':
       return key === 'a' ? { ...o, a: p } : { ...o, b: p }
     case 'arc':
@@ -328,8 +362,9 @@ function unwrapNear(deg: number, prev: number): number {
 export function translate(o: Obj, d: Vec): Obj {
   const t = (p: Vec): Vec => add(p, d)
   switch (o.type) {
-    case 'circle': case 'band': case 'rings': case 'arc': case 'ticks':
+    case 'circle': case 'band': case 'rings': case 'arc': case 'ticks': case 'field':
       return { ...o, c: t(o.c) }
+    case 'image': return { ...o, at: t(o.at) }
     case 'line': return { ...o, a: t(o.a), b: t(o.b) }
     case 'dot': case 'box': case 'curve': return { ...o, at: t(o.at) }
     case 'label': return { ...o, at: t(o.at), leader: o.leader ? t(o.leader) : null }

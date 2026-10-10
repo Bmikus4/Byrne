@@ -1,7 +1,10 @@
 import { ChartDoc, normalize } from '../chart/model.js'
 import { toFigure } from '../chart/render.js'
 import { toSvg } from '../figure/svg.js'
-import { toTikz } from '../figure/tikz.js'
+import { tikzImages, toTikz } from '../figure/tikz.js'
+import { toAnimatedSvg } from '../chart/animate.js'
+import { dataUrlBytes } from '../chart/png.js'
+import { strToU8, zipSync } from 'fflate'
 import { toPdf } from '../figure/pdf.js'
 
 const safe = (s: string): string => s.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') || 'chart'
@@ -17,7 +20,7 @@ function download(name: string, data: BlobPart, type: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 2000)
 }
 
-export type ExportKind = 'png' | 'svg' | 'pdf' | 'tex' | 'json'
+export type ExportKind = 'png' | 'svg' | 'animated' | 'pdf' | 'tex' | 'json'
 
 export async function exportChart(doc: ChartDoc, kind: ExportKind): Promise<void> {
   const name = safe(doc.title)
@@ -25,7 +28,18 @@ export async function exportChart(doc: ChartDoc, kind: ExportKind): Promise<void
     download(`${name}.chart.json`, JSON.stringify(doc, null, 1), 'application/json')
     return
   }
+  if (kind === 'animated') {
+    download(`${name}-animated.svg`, toAnimatedSvg(doc), 'image/svg+xml')
+    return
+  }
   const fig = toFigure(doc.objects, doc.title)
+  if (kind === 'tex' && tikzImages(fig).length) {
+    // \includegraphics needs the pictures as files beside the .tex, so they travel together.
+    const files: Record<string, Uint8Array> = { [`${name}.tex`]: strToU8(toTikz(fig, { standalone: true })) }
+    for (const f of tikzImages(fig)) files[f.name] = dataUrlBytes(f.href)
+    download(`${name}-latex.zip`, zipSync(files) as BlobPart, 'application/zip')
+    return
+  }
   if (kind === 'svg') download(`${name}.svg`, toSvg(fig, { background: doc.background }), 'image/svg+xml')
   else if (kind === 'tex') download(`${name}.tex`, toTikz(fig, { standalone: true }), 'text/plain')
   else if (kind === 'pdf') download(`${name}.pdf`, (await toPdf(fig, { background: doc.background, title: doc.title })) as BlobPart, 'application/pdf')

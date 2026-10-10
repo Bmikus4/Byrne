@@ -80,6 +80,11 @@ export function primDistance(p: Pt, q: Prim): number {
       return Math.max(0, polyDist(p, pts) - half)
     }
     case 'label': return Infinity
+    case 'image': {
+      const dx = Math.max(q.at[0] - p[0], 0, p[0] - q.at[0] - q.w)
+      const dy = Math.max(q.at[1] - p[1], 0, p[1] - q.at[1] - q.h)
+      return Math.hypot(dx, dy)
+    }
   }
 }
 

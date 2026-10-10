@@ -6,6 +6,9 @@ import { elementsOf, kindName, stateFrom } from '../chart/orbit.js'
 import { sample } from '../chart/curves.js'
 import { Field, Num, Section, Segmented, Slider, Swatches, TextArea, Toggle, XY, fmt } from './controls.js'
 import { duplicates, selected, useChart } from './store.js'
+import { replacePicture } from './images.js'
+import { binaryOf, spectrum } from '../chart/field.js'
+import { SPECTRUM_SAMPLES } from '../chart/render.js'
 
 type Patch<T extends Obj> = (p: Partial<T>, field: string) => void
 
@@ -47,6 +50,8 @@ function Body({ o, patch }: { o: Obj; patch: Patch<Obj> }): JSX.Element {
     case 'curve': return <CurvePanel o={o} patch={patch as Patch<typeof o>} />
     case 'path': return <PathPanel o={o} patch={patch as Patch<typeof o>} />
     case 'orbit': return <OrbitPanel o={o} patch={patch as Patch<typeof o>} />
+    case 'field': return <FieldPanel o={o} patch={patch as Patch<typeof o>} />
+    case 'image': return <ImagePanel o={o} patch={patch as Patch<typeof o>} />
   }
 }
 
@@ -418,6 +423,70 @@ function OrbitPanel({ o, patch }: { o: ObjOf<'orbit'>; patch: Patch<ObjOf<'orbit
 }
 
 // ---------------------------------------------------------------------------
+
+function FieldPanel({ o, patch }: { o: ObjOf<'field'>; patch: Patch<ObjOf<'field'>> }): JSX.Element {
+  const bits = useMemo(() => binaryOf(spectrum(o, o.sliceAngle, SPECTRUM_SAMPLES), Math.round(o.sites)), [o])
+  return (<>
+    <Section title="Field">
+      <Field label="Centre"><XY value={o.c} onChange={(c) => patch({ c }, 'c')} /></Field>
+      <Field label="Radius"><Slider value={o.r} min={0.5} max={12} step={0.05} unit="cm" onChange={(r) => patch({ r }, 'r')} /></Field>
+      <Field label="Ring ratio" hint="Each crest is this many times further out than the next one in. Closer to 1 means more rings.">
+        <Slider value={o.ratio} min={1.1} max={3} step={0.01} onChange={(ratio) => patch({ ratio }, 'ratio')} />
+      </Field>
+      <Field label="Pockets" hint="Dense spots per crest, on a spiral"><Slider value={o.pockets} min={0} max={12} step={1} onChange={(v) => patch({ pockets: Math.round(v) }, 'pockets')} /></Field>
+      <Field label="Pocket strength"><Slider value={o.strength} min={0} max={1.5} step={0.05} onChange={(strength) => patch({ strength }, 'strength')} /></Field>
+      <Field label="Spiral turn" hint="Degrees the pockets turn from one crest to the next"><Slider value={o.twist} min={-180} max={180} step={1} unit="°" onChange={(twist) => patch({ twist }, 'twist')} /></Field>
+      <Field label="Pattern"><button onClick={() => patch({ seed: (o.seed * 7919 + 13) % 100000 }, 'seed')}>Shuffle pockets</button></Field>
+      <Toggle checked={o.poles} label="Each pole carries its own field (half scale)" onChange={(poles) => patch({ poles }, 'poles')} />
+    </Section>
+    <Section title="Colour">
+      <Field label="Colours">
+        <Segmented value={o.palette} onChange={(palette) => patch({ palette }, 'palette')} options={[
+          { value: 'jet', label: 'Rainbow' }, { value: 'viridis', label: 'Viridis' }, { value: 'magma', label: 'Magma' },
+          { value: 'ice', label: 'Ice' }, { value: 'grey', label: 'Grey' },
+        ]} />
+      </Field>
+      <Field label="Rim"><Swatches allowNone value={o.width > 0 ? o.color : ''} onChange={(v) => patch(v ? { color: v, width: o.width || 2.4 } : { width: 0 }, 'color')} /></Field>
+      <Field label="Rim width"><Slider value={o.width} min={0} max={6} step={0.1} unit="pt" onChange={(width) => patch({ width }, 'width')} /></Field>
+      <Field label="Detail" hint="Pixels across. More is sharper and slower."><Slider value={o.detail} min={120} max={720} step={20} onChange={(v) => patch({ detail: Math.round(v) }, 'detail')} /></Field>
+      <Field label="Opacity"><Slider value={o.opacity} min={0.05} max={1} step={0.05} onChange={(opacity) => patch({ opacity }, 'opacity')} /></Field>
+    </Section>
+    <Section title="Overlay and slice">
+      <Toggle checked={o.geometry} label="Horn torus and plumb line in white" onChange={(geometry) => patch({ geometry }, 'geometry')} />
+      <Toggle checked={o.slice} label="Read a slice as a spectrum and a binary string" onChange={(slice) => patch({ slice }, 'slice')} />
+      {o.slice && <>
+        <Field label="Slice direction" hint="90° is straight up the plumb line"><Slider value={o.sliceAngle} min={0} max={360} step={1} unit="°" onChange={(sliceAngle) => patch({ sliceAngle }, 'sliceAngle')} /></Field>
+        <Field label="Sites"><Slider value={o.sites} min={4} max={64} step={1} onChange={(v) => patch({ sites: Math.round(v) }, 'sites')} /></Field>
+        <p className="tip mono">{bits}</p>
+      </>}
+    </Section>
+    <Section title="Motion">
+      <Field label="Flow" hint="Play (top bar) runs it. Exported by Export, Animated SVG.">
+        <Segmented value={o.flow} onChange={(flow) => patch({ flow }, 'flow')} options={[
+          { value: 'in', label: 'Inward' }, { value: 'out', label: 'Outward' }, { value: 'still', label: 'Still' },
+        ]} />
+      </Field>
+      {o.flow !== 'still' && <Field label="Seconds per crest"><Slider value={o.period} min={0.5} max={20} step={0.5} unit="s" onChange={(period) => patch({ period }, 'period')} /></Field>}
+    </Section>
+  </>)
+}
+
+function ImagePanel({ o, patch }: { o: ObjOf<'image'>; patch: Patch<ObjOf<'image'>> }): JSX.Element {
+  return (<>
+    <Section title="Picture">
+      <Field label="Centre"><XY value={o.at} onChange={(at) => patch({ at }, 'at')} /></Field>
+      <Field label="Width" hint="The height follows, so the picture keeps its shape">
+        <Slider value={o.w} min={0.2} max={30} step={0.1} unit="cm" onChange={(w) => patch({ w, h: (w * o.h) / o.w }, 'w')} />
+      </Field>
+      <Field label="Opacity"><Slider value={o.opacity} min={0.05} max={1} step={0.05} onChange={(opacity) => patch({ opacity }, 'opacity')} /></Field>
+      <button className="wide" onClick={() => replacePicture(o.id)}>{o.src ? 'Replace picture' : 'Choose a picture'}</button>
+    </Section>
+    <Section title="Frame" open={o.width > 0}>
+      <Field label="Colour"><Swatches value={o.color} onChange={(v) => patch({ color: v, width: o.width || 0.8 }, 'color')} /></Field>
+      <Field label="Thickness"><Slider value={o.width} min={0} max={4} step={0.1} unit="pt" onChange={(width) => patch({ width }, 'width')} /></Field>
+    </Section>
+  </>)
+}
 
 function Actions({ o }: { o: Obj }): JSX.Element {
   const s = useChart.getState()

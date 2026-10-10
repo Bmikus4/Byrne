@@ -51,11 +51,33 @@ interface State {
 }
 
 const KEY = 'byrne-chart-doc-v1'
+/**
+ * localStorage holds about 5 MB and a few pictures exceed it, after which every autosave
+ * failed silently. A chart that does not fit goes to IndexedDB, and this marker stays in
+ * localStorage so the page knows to look there.
+ */
+const IN_DATABASE = '{"inDatabase":true}'
+
+function database<T>(mode: IDBTransactionMode, f: (s: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+  return new Promise((ok, fail) => {
+    const open = indexedDB.open('byrne-chart', 1)
+    open.onupgradeneeded = () => open.result.createObjectStore('docs')
+    open.onerror = () => fail(open.error)
+    open.onsuccess = () => {
+      const req = f(open.result.transaction('docs', mode).objectStore('docs'))
+      req.onsuccess = () => { ok(req.result); open.result.close() }
+      req.onerror = () => { fail(req.error); open.result.close() }
+    }
+  })
+}
+
+let restoreFromDatabase = false
 
 function initialDoc(): ChartDoc {
   try {
     const raw = localStorage.getItem(KEY)
-    if (raw) return normalize(JSON.parse(raw))
+    if (raw === IN_DATABASE) restoreFromDatabase = true
+    else if (raw) return normalize(JSON.parse(raw))
   } catch { /* storage blocked or the saved copy is unreadable: start from the template */ }
   return chartThree()
 }
@@ -143,9 +165,22 @@ useChart.subscribe((s, prev) => {
   if (s.doc === prev.doc) return
   clearTimeout(saveTimer)
   saveTimer = setTimeout(() => {
-    try { localStorage.setItem(KEY, JSON.stringify(s.doc)) } catch { /* full or blocked */ }
+    const json = JSON.stringify(s.doc)
+    try {
+      localStorage.setItem(KEY, json)
+    } catch {
+      database('readwrite', (st) => st.put(json, KEY))
+        .then(() => { try { localStorage.setItem(KEY, IN_DATABASE) } catch { /* blocked */ } })
+        .catch(() => { /* no storage at all: Save still writes a file */ })
+    }
   }, 400)
 })
+
+if (restoreFromDatabase) {
+  database<string | undefined>('readonly', (st) => st.get(KEY))
+    .then((json) => { if (json) useChart.setState({ doc: normalize(JSON.parse(json)), fitAt: Date.now() }) })
+    .catch(() => { /* unreadable: the template stays */ })
+}
 
 /** Copies of objects with fresh ids, offset so a paste is visibly a new thing. */
 export function duplicates(objs: readonly Obj[], offset: Vec = [0.5, -0.5]): Obj[] {

@@ -52,7 +52,7 @@ export function toTikz(fig: Figure, opts: TikzOptions = {}): string {
   if (opts.standalone) {
     out.push(
       '\\documentclass[tikz,border=2pt]{standalone}',
-      '\\usepackage{amsmath,amssymb}',
+      '\\usepackage{amsmath,amssymb,graphicx}',
       '\\usetikzlibrary{arrows.meta}',
       '\\begin{document}',
     )
@@ -63,14 +63,30 @@ export function toTikz(fig: Figure, opts: TikzOptions = {}): string {
   }
   if (opts.parameters?.length) out.push('')
 
+  const files = new Map(tikzImages(fig).map((f) => [f.href, f.name]))
+  if (files.size) out.push(`% Pictures are files saved next to this one: ${[...files.values()].join(', ')}.`)
   out.push('\\begin{tikzpicture}')
   for (const p of fig.prims) {
-    const line = prim(p, fig.height)
+    const line = p.kind === 'image'
+      ? `\\node[anchor=north west, inner sep=0pt${p.style.opacity !== undefined ? `, opacity=${n(p.style.opacity)}` : ''}] at ${P(p.at, fig.height)} ` +
+        `{\\includegraphics[width=${n(p.w)}pt, height=${n(p.h)}pt]{${files.get(p.href)}}};`
+      : prim(p, fig.height)
     if (line) out.push('  ' + line)
   }
   out.push('\\end{tikzpicture}')
   if (opts.standalone) out.push('\\end{document}')
   return out.join('\n') + '\n'
+}
+
+/** The picture files a TikZ export refers to, one per distinct image, in drawing order. */
+export function tikzImages(fig: Figure): Array<{ name: string; href: string }> {
+  const out: Array<{ name: string; href: string }> = []
+  for (const p of fig.prims) {
+    if (p.kind !== 'image' || out.some((f) => f.href === p.href)) continue
+    const ext = /^data:image\/jpe?g/i.test(p.href) ? 'jpg' : 'png'
+    out.push({ name: `picture-${out.length + 1}.${ext}`, href: p.href })
+  }
+  return out
 }
 
 function rgb(color: string | undefined): string | undefined {

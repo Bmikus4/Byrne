@@ -208,6 +208,22 @@ export function keplerOrbits(): ChartDoc {
   ])
 }
 
+/** Figure 8 of The Need for Quantum Relativity: the observer's patch and its encoding. */
+export function experienceMap(): ChartDoc {
+  const rim = '#c8501e'
+  return doc('The radial structure and its encoding', [
+    make('field', [0, 0], { r: 5, name: "The observer's patch" }),
+    label([0, 5.3], { text: "the observer's patch: one field, emanated from the centre; the horn torus drawn inside it", anchor: 's', color: rim, size: 7, name: 'Title' }),
+    label([0, -5.3], {
+      text: 'radius = scale (fine to coarse), angle = direction; colour = density of placed observations.',
+      note: 'White: the encoding geometry and the slice from the zero point to the horizon',
+      anchor: 'n', color: C.note, size: 6, name: 'Caption',
+    }),
+    label([-5, -6.45], { text: 'the slice, projected onto a line: one continuous spectrum', anchor: 'sw', align: 'left', size: 6.5, name: 'Spectrum caption' }),
+    label([-5, -8.1], { text: 'the same line read as binary: 32 sites, 1 above the median of the spectrum, 0 below', anchor: 'sw', align: 'left', size: 6.5, name: 'Binary caption' }),
+  ])
+}
+
 export function blank(): ChartDoc {
   return emptyDoc('Untitled chart')
 }
@@ -216,6 +232,7 @@ export const TEMPLATES: ReadonlyArray<{ id: string; name: string; blurb: string;
   { id: 'three', name: 'Chart III', blurb: 'The Architecture of Experience, in your own words', make: chartThree },
   { id: 'one', name: 'Chart I', blurb: 'The Chart of Experience: observer at the centre', make: chartOne },
   { id: 'two', name: 'Chart II', blurb: 'The Chart of the Cosmos: source at the centre', make: chartTwo },
+  { id: 'experience', name: 'Experience map', blurb: 'Figure 8: the radial field, its slice, and the binary string it reads as', make: experienceMap },
   { id: 'kepler', name: 'Kepler orbits', blurb: 'Circle, ellipse, parabola and hyperbola around one body', make: keplerOrbits },
   { id: 'blank', name: 'Blank', blurb: 'An empty page with a grid', make: blank },
 ]

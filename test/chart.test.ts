@@ -10,7 +10,7 @@ import { toLatex, layoutField } from '../src/chart/text.js'
 import { snap, snapToGrid } from '../src/chart/snap.js'
 import { K, render, ringRadii, toFigure, toPt } from '../src/chart/render.js'
 import { hitTest, primDistance } from '../src/chart/hit.js'
-import { emptyDoc, make, normalize, setHandle, ObjOf } from '../src/chart/model.js'
+import { emptyDoc, make, normalize, setHandle, translate, ObjOf } from '../src/chart/model.js'
 import { TEMPLATES, chartThree } from '../src/chart/templates.js'
 import { toSvg } from '../src/figure/svg.js'
 import { toTikz } from '../src/figure/tikz.js'
@@ -251,5 +251,100 @@ describe('drawn curves', () => {
     // First span: control points at p0 + (p1 - p0)/6 and p1 - (p2 - p0)/6.
     expect(c[1]).toEqual([1 / 6, 2 / 6])
     expect(c[2]).toEqual([1 - 2 / 6, 2])
+  })
+})
+
+describe('pictures, the radial field, and animation', () => {
+  it('encodes a PNG whose pixels decode back exactly', async () => {
+    const { encodePng, pngDataUrl, dataUrlBytes } = await import('../src/chart/png.js')
+    const { unzlibSync } = await import('fflate')
+    const px = new Uint8Array([255, 0, 0, 255, 0, 255, 0, 128, 0, 0, 255, 0, 9, 8, 7, 6, 200, 100, 50, 25, 1, 2, 3, 4])
+    const png = encodePng(3, 2, px)
+    expect([...png.subarray(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10])
+    const len = new DataView(png.buffer).getUint32(33)
+    const raw = unzlibSync(png.subarray(41, 41 + len))
+    const back: number[] = []
+    for (let y = 0; y < 2; y++) {
+      const row = raw.subarray(y * 13 + 1, y * 13 + 13)
+      const out: number[] = []
+      row.forEach((b, i) => out.push((b + (i >= 4 ? out[i - 4]! : 0)) & 0xff))
+      back.push(...out)
+    }
+    expect(back).toEqual([...px])
+    expect([...dataUrlBytes(pngDataUrl(3, 2, px))]).toEqual([...png])
+  })
+
+  it('the field is self-similar: one crest in and one twist round is the same field', async () => {
+    const { fieldValue } = await import('../src/chart/field.js')
+    const s = { ratio: 1.45, pockets: 5, strength: 0.9, twist: 55, seed: 3, poles: false }
+    const tw = (55 * Math.PI) / 180
+    for (const [r, th] of [[0.8, 0.3], [0.5, 2.0], [0.3, -1.1], [0.95, 4.0]] as const) {
+      const v = fieldValue(s, r * Math.cos(th), r * Math.sin(th))
+      const r2 = r / 1.45, th2 = th + tw
+      expect(fieldValue(s, r2 * Math.cos(th2), r2 * Math.sin(th2))).toBeCloseTo(v, 9)
+      // A full period of flow is the identity: the loop has no seam.
+      expect(fieldValue(s, r * Math.cos(th), r * Math.sin(th), 1)).toBeCloseTo(v, 9)
+    }
+  })
+
+  it('reads a spectrum as binary against its median', async () => {
+    const { binaryOf } = await import('../src/chart/field.js')
+    expect(binaryOf([0, 0.1, 0.2, 0.3, 0.6, 0.7, 0.8, 0.9], 4)).toBe('0011')
+  })
+
+  it('Figure 8 renders and exports with its pictures in every format', async () => {
+    const { experienceMap } = await import('../src/chart/templates.js')
+    const { toPdf } = await import('../src/figure/pdf.js')
+    const { tikzImages } = await import('../src/figure/tikz.js')
+    const d = experienceMap()
+    const fig = toFigure(d.objects, d.title)
+    const images = fig.prims.filter((p) => p.kind === 'image')
+    expect(images.length).toBe(2)
+    expect(fig.prims.filter((p) => p.kind === 'label' && /^\\textsf\{[01]\}$/.test(p.latex)).length).toBe(32)
+    expect(toSvg(fig)).toMatch(/<image [^>]*href="data:image\/png;base64,/)
+    const pdf = new TextDecoder('latin1').decode(await toPdf(fig))
+    // Two pictures, plus the soft mask that keeps the disk's transparent corners.
+    expect(pdf.match(/\/Subtype \/Image/g)?.length).toBe(3)
+    expect(pdf).toContain('/SMask')
+    const tex = toTikz(fig, { standalone: true })
+    expect(tikzImages(fig).map((f) => f.name)).toEqual(['picture-1.png', 'picture-2.png'])
+    expect(tex).toContain('\\includegraphics[width=')
+    expect(tex).not.toMatch(/NaN/)
+  })
+
+  it('a picture keeps its proportions when resized by its corner', () => {
+    const o = make('image', [0, 0], { w: 4, h: 3, src: 'data:image/png;base64,' }) as ObjOf<'image'>
+    const big = setHandle(o, 'size', [5, -1]) as ObjOf<'image'>
+    expect(big.w).toBeCloseTo(10, 9)
+    expect(big.h / big.w).toBeCloseTo(0.75, 9)
+  })
+
+  it('the animated SVG flows the field and runs orbits at Kepler speed', async () => {
+    const { toAnimatedSvg } = await import('../src/chart/animate.js')
+    const { experienceMap, keplerOrbits } = await import('../src/chart/templates.js')
+    const field = experienceMap()
+    const k = keplerOrbits()
+    const svg = toAnimatedSvg({ ...k, objects: [...k.objects, ...field.objects.map((o) => translate(o, [20, 0]))] })
+    expect(svg).not.toContain('anim:')
+    expect(svg).toContain('type="rotate" values="0;-55"')
+    expect(svg).toMatch(new RegExp(`type="scale" values="1;[^"]*;${Math.round(1000 / 1.45) / 1000}"`))
+    const motions = [...svg.matchAll(/<animateMotion values="([^"]+)"/g)].map((m) => m[1]!.split(';').map((p) => p.split(',').map(Number)))
+    expect(motions.length).toBe(4)
+    for (const m of motions) expect(m.length).toBe(121)
+    // Equal times per step, so step length is speed: the ellipse (e = 0.6) is fastest at
+    // periapsis by (1 + e) / (1 - e) = 4, and the circle is uniform.
+    const steps = motions.map((m) => m.slice(1).map((p, i) => Math.hypot(p[0]! - m[i]![0]!, p[1]! - m[i]![1]!)))
+    const ratios = steps.map((s) => Math.max(...s) / Math.min(...s))
+    expect(ratios.some((r) => Math.abs(r - 4) < 0.05)).toBe(true)
+    expect(ratios.some((r) => Math.abs(r - 1) < 1e-3)).toBe(true)
+  })
+})
+
+describe('label colour', () => {
+  it('reaches the glyphs, which MathJax fills with currentColor', () => {
+    const o = make('label', [0, 0], { text: 'Chaos', color: '#be3c46' })
+    const svg = toSvg(toFigure([o], 't'))
+    expect(svg).toContain('color="#be3c46"')
+    expect(svg).toContain('fill="currentColor"')
   })
 })

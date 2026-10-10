@@ -292,5 +292,6 @@ function remap(p: Prim, map: (q: Pt) => Pt, s: number): Prim {
     case 'ellipse': return { ...p, c: map(p.c), rx: p.rx * s, ry: p.ry * s }
     case 'arc': return { ...p, c: map(p.c), r: p.r * s }
     case 'label': return { ...p, at: map(p.at) }
+    case 'image': return { ...p, at: map(p.at), w: p.w * s, h: p.h * s }
   }
 }

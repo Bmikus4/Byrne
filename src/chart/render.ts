@@ -9,6 +9,7 @@ import { Arrow, COLORS, Obj, ObjOf, Vec } from './model.js'
 import { drawRange, elementsOf, equalTimeNus, advance, pointAt, velocityAt, Elements } from './orbit.js'
 import { sample, smoothThrough } from './curves.js'
 import { Block, NOTE_GREY, layoutBlock } from './text.js'
+import { binaryOf, fieldImage, spectrum, stripImage } from './field.js'
 
 /** Points per centimetre. */
 export const K = 28.3465
@@ -33,6 +34,12 @@ export interface Rendered {
 export interface RenderOpts {
   /** Seconds of orbit time to advance every satellite by. View only. */
   readonly time?: number
+  /**
+   * For the animated SVG: whatever moves is drawn as a placeholder image whose href is
+   * `anim:<kind>:<id>` and whose box is where it moves, and chart/animate.ts swaps each
+   * placeholder for SMIL. The placeholder keeps the export crop identical to the still.
+   */
+  readonly animated?: boolean
 }
 
 const DASH = (d: Obj['dash'], w: number): number[] | undefined =>
@@ -184,9 +191,24 @@ export function render(objects: readonly Obj[], opts: RenderOpts = {}): Rendered
       }
 
       case 'orbit': {
-        orbitPrims(o, opts.time ?? 0, push, line, dot, label, d, orbits)
+        orbitPrims(o, opts.time ?? 0, !!opts.animated, push, line, dot, label, d, orbits)
         break
       }
+
+      case 'image': {
+        const tl = toPt([o.at[0] - o.w / 2, o.at[1] + o.h / 2])
+        const W = o.w * K, H = o.h * K
+        if (o.src) push({ kind: 'image', at: tl, w: W, h: H, href: o.src, style: { opacity: o.opacity < 1 ? o.opacity : undefined }, depth: d, id })
+        const frame: Pt[] = [tl, [tl[0] + W, tl[1]], [tl[0] + W, tl[1] + H], [tl[0], tl[1] + H]]
+        if (o.width > 0 || !o.src) {
+          push({ kind: 'polyline', pts: frame, closed: true, style: o.width > 0 ? st({ fill: 'none' }) : { stroke: NOTE_GREY, weight: 0.5, fill: 'none', dash: [3, 2] }, depth: d, id })
+        }
+        break
+      }
+
+      case 'field':
+        fieldPrims(o, opts, push, label, d)
+        break
     }
   }
   return { prims, boxes, areas, problems, orbits }
@@ -289,8 +311,75 @@ function roundedRect(x: number, y: number, w: number, h: number, r: number): Pt[
   return pts
 }
 
+/** Flow phase in crests, quantised to 1/48 so the raster cache holds one whole loop. */
+export function fieldPhase(o: ObjOf<'field'>, time: number): number {
+  if (o.flow === 'still' || !time) return 0
+  const q = (Math.round(((time / Math.max(0.1, o.period)) % 1) * 48) / 48) % 1
+  return o.flow === 'in' ? q : (1 - q) % 1
+}
+
+export const SPECTRUM_SAMPLES = 400
+
+/** Where the slice strips sit under a field, in world cm: spectrum, then binary. */
+export function stripBoxes(o: ObjOf<'field'>): { spectrum: Box4; binary: Box4 } {
+  const x0 = o.c[0] - o.r, x1 = o.c[0] + o.r
+  const top = o.c[1] - o.r - 1.5
+  return { spectrum: [x0, top, x1, top - 0.9], binary: [x0, top - 1.65, x1, top - 2.4] }
+}
+
+const BIT_INK = '#1e2230'
+
+function fieldPrims(
+  o: ObjOf<'field'>, opts: RenderOpts, push: (p: Prim) => void,
+  label: (at: Pt, latex: string, size: number, color: string) => void, d: number,
+): void {
+  const id = o.id
+  const moving = !!opts.animated && o.flow !== 'still'
+  const phase = fieldPhase(o, opts.time ?? 0)
+  const n = Math.round(Math.min(720, Math.max(120, o.detail)))
+  const tl = toPt([o.c[0] - o.r, o.c[1] + o.r])
+  push({
+    kind: 'image', at: tl, w: 2 * o.r * K, h: 2 * o.r * K,
+    href: moving ? `anim:field:${id}` : fieldImage(o, o.palette, n, phase),
+    style: { opacity: o.opacity < 1 ? o.opacity : undefined }, depth: d, id,
+  })
+  if (o.width > 0) push({ kind: 'circle', c: toPt(o.c), r: o.r * K, style: { stroke: o.color, weight: o.width, fill: 'none' }, depth: d, id })
+  const white = (w: number, dash?: number[]): Style => ({ stroke: '#ffffff', weight: w, fill: 'none', dash })
+  if (o.geometry) {
+    for (const s of [-1, 1]) push({ kind: 'circle', c: toPt([o.c[0] + (s * o.r) / 2, o.c[1]]), r: (o.r / 2) * K, style: white(0.9), depth: d, id })
+    push({ kind: 'line', a: toPt([o.c[0], o.c[1] - o.r]), b: toPt([o.c[0], o.c[1] + o.r]), style: white(0.7, [2.5, 2.5]), depth: d, id })
+  }
+  if (!o.slice) return
+  const a = (o.sliceAngle * Math.PI) / 180
+  push({ kind: 'line', a: toPt(o.c), b: toPt([o.c[0] + o.r * Math.cos(a), o.c[1] + o.r * Math.sin(a)]), style: white(1.3), depth: d, id })
+
+  const { spectrum: sp, binary: bn } = stripBoxes(o)
+  const values = spectrum(o, o.sliceAngle, SPECTRUM_SAMPLES, phase)
+  const rect = (b: Box4): Pt[] => [toPt([b[0], b[1]]), toPt([b[2], b[1]]), toPt([b[2], b[3]]), toPt([b[0], b[3]])]
+  const edge: Style = { stroke: BIT_INK, weight: 0.4, fill: 'none' }
+  push({
+    kind: 'image', at: toPt([sp[0], sp[1]]), w: (sp[2] - sp[0]) * K, h: (sp[1] - sp[3]) * K,
+    href: moving ? `anim:spectrum:${id}` : stripImage(values, o.palette), style: {}, depth: d, id,
+  })
+  push({ kind: 'polyline', pts: rect(sp), closed: true, style: edge, depth: d, id })
+  const sites = Math.max(1, Math.min(128, Math.round(o.sites)))
+  if (moving) {
+    push({ kind: 'image', at: toPt([bn[0], bn[1]]), w: (bn[2] - bn[0]) * K, h: (bn[1] - bn[3]) * K, href: `anim:binary:${id}`, style: {}, depth: d, id })
+    return
+  }
+  const bits = binaryOf(values, sites)
+  const cw = (bn[2] - bn[0]) / sites
+  const size = Math.min(7, cw * K * 0.6)
+  for (let k = 0; k < sites; k++) {
+    const one = bits[k] === '1'
+    const cell: Box4 = [bn[0] + k * cw, bn[1], bn[0] + (k + 1) * cw, bn[3]]
+    push({ kind: 'polyline', pts: rect(cell), closed: true, style: { stroke: BIT_INK, weight: 0.3, fill: one ? BIT_INK : '#ffffff' }, depth: d, id })
+    label(toPt([cell[0] + cw / 2, (bn[1] + bn[3]) / 2 - size / K / 2.8]), `\\textsf{${bits[k]}}`, size, one ? '#ffffff' : BIT_INK)
+  }
+}
+
 function orbitPrims(
-  o: ObjOf<'orbit'>, time: number, push: (p: Prim) => void,
+  o: ObjOf<'orbit'>, time: number, animated: boolean, push: (p: Prim) => void,
   line: (a: Vec, b: Vec, s: Style) => void, dot: (at: Vec, size: number, color: string) => void,
   label: (at: Pt, latex: string, size: number, color: string) => void, d: number,
   orbits: Map<string, Elements>,
@@ -350,6 +439,11 @@ function orbitPrims(
 
   if (o.showBody) dot(o.c, 9, o.bodyColor)
 
+  if (animated && el.kind !== 'fall' && (o.showSatellite || o.showVelocity || o.showRadius)) {
+    // A zero-size placeholder at the body: animate.ts reads the export's shift from it.
+    push({ kind: 'image', at: toPt(o.c), w: 0, h: 0, href: `anim:orbit:${id}`, style: {}, depth: d, id })
+    return
+  }
   const nu = time ? advance(el, time) : el.nu
   const sat = time ? pointAt(el, o.c, nu) : o.at
   const vel = time ? velocityAt(el, nu) : o.vel
@@ -381,6 +475,7 @@ export function primBounds(p: Prim): [Pt, Pt] {
     }
     case 'arc': return [[p.c[0] - p.r - w, p.c[1] - p.r - w], [p.c[0] + p.r + w, p.c[1] + p.r + w]]
     case 'label': return [[p.at[0] - 1, p.at[1] - 1], [p.at[0] + 1, p.at[1] + 1]]
+    case 'image': return [p.at, [p.at[0] + p.w, p.at[1] + p.h]]
   }
 }
 
@@ -390,13 +485,13 @@ function shiftPrim(p: Prim, dx: number, dy: number): Prim {
     case 'line': return { ...p, a: s(p.a), b: s(p.b) }
     case 'polyline': case 'cubic': return { ...p, pts: p.pts.map(s) }
     case 'circle': case 'ellipse': case 'arc': return { ...p, c: s(p.c) }
-    case 'label': return { ...p, at: s(p.at) }
+    case 'label': case 'image': return { ...p, at: s(p.at) }
   }
 }
 
 /** The figure an export writes: cropped to the drawing with a margin. */
-export function toFigure(objects: readonly Obj[], title: string, margin = 12): Figure {
-  const r = render(objects)
+export function toFigure(objects: readonly Obj[], title: string, margin = 12, opts: RenderOpts = {}): Figure {
+  const r = render(objects, opts)
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
   for (const b of r.boxes.values()) {
     x0 = Math.min(x0, b[0]); y0 = Math.min(y0, b[1]); x1 = Math.max(x1, b[2]); y1 = Math.max(y1, b[3])

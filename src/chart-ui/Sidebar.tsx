@@ -2,6 +2,7 @@ import type { JSX } from 'react'
 import { useMemo } from 'react'
 import { Obj, TYPE_NAMES } from '../chart/model.js'
 import { Tool, useChart } from './store.js'
+import { pickPictures } from './images.js'
 
 interface ToolDef { id: Tool; label: string; key: string; hint: string; icon: JSX.Element }
 
@@ -24,6 +25,8 @@ export const TOOLS: ToolDef[] = [
   { id: 'ticks', label: 'Ticks', key: 'K', hint: 'A string of labelled ticks around a circle (the binary string).', icon: I(<path d="M5 9l1.5 3M9 6.5l1 3.2M13 5.6l.2 3.3M17 6.3l-.8 3.2M20.5 8.3l-1.6 2.9" />) },
   { id: 'curve', label: 'Formula', key: 'F', hint: 'A curve from a formula: y = f(x), parametric, or polar.', icon: I(<path d="M3 17c3 0 4-10 9-10s6 10 9 10" />) },
   { id: 'path', label: 'Draw', key: 'P', hint: 'Click points for a smooth curve, or drag to draw freehand. Enter or double-click to finish.', icon: I(<path d="M4 18c2-6 5-11 8-11 2.5 0 2 4 4 4s2-3 4-4" />) },
+  { id: 'field', label: 'Heatmap', key: 'H', hint: 'The radial field of Figure 8: rings, pockets, and its slice read as binary. Press at the centre, drag out the radius.', icon: I([<circle key="a" cx="12" cy="12" r="9" />, <circle key="b" cx="12" cy="12" r="5.5" fill="currentColor" opacity="0.25" />, <circle key="c" cx="12" cy="12" r="2.2" fill="currentColor" opacity="0.6" />]) },
+  { id: 'image', label: 'Picture', key: 'I', hint: 'Put a picture on the chart. You can also drop a file on the page, or paste one.', icon: I([<rect key="a" x="3.5" y="5" width="17" height="14" rx="1.5" />, <circle key="b" cx="9" cy="10" r="1.6" />, <path key="c" d="M4 17l5-4.5 4 3.5 3-2.5 4 3.5" />]) },
   { id: 'orbit', label: 'Orbit', key: 'O', hint: 'Press at the central body, drag to where the satellite is. Then drag its blue arrow.', icon: I([<ellipse key="a" cx="12" cy="12" rx="9" ry="5.5" transform="rotate(-25 12 12)" />, <circle key="b" cx="9" cy="13" r="2" fill="currentColor" />, <circle key="c" cx="19.5" cy="8" r="1.4" fill="currentColor" />]) },
 ]
 
@@ -33,7 +36,7 @@ export function ToolBar(): JSX.Element {
   return (
     <nav className="tools" aria-label="Tools">
       {TOOLS.map((t) => (
-        <button key={t.id} className={`tool${tool === t.id ? ' on' : ''}`} onClick={() => setTool(t.id)}
+        <button key={t.id} className={`tool${tool === t.id ? ' on' : ''}`} onClick={() => (t.id === 'image' ? pickPictures() : setTool(t.id))}
           title={`${t.label} (${t.key})\n${t.hint}`} aria-pressed={tool === t.id}>
           {t.icon}
           <span>{t.label}</span>
@@ -45,7 +48,7 @@ export function ToolBar(): JSX.Element {
 
 const ICON: Record<Obj['type'], string> = {
   circle: '○', band: '◎', rings: '◎', line: '╱', arc: '◜', dot: '●', label: 'T', box: '▭',
-  ticks: '⋮', curve: '∿', path: '✎', orbit: '⊙',
+  ticks: '⋮', curve: '∿', path: '✎', orbit: '⊙', field: '◉', image: '▣',
 }
 
 const small = (children: JSX.Element | JSX.Element[]): JSX.Element => (

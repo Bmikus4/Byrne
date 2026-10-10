@@ -72,6 +72,13 @@ export function toSvg(fig: Figure, opts: SvgOptions = {}): string {
       case 'label':
         body.push(label(p, mode))
         break
+      case 'image':
+        body.push(
+          `<image x="${n(p.at[0])}" y="${n(p.at[1])}" width="${n(p.w)}" height="${n(p.h)}" ` +
+          `preserveAspectRatio="none"${p.style.opacity !== undefined ? ` opacity="${n(p.style.opacity)}"` : ''} ` +
+          `href="${p.href}" xlink:href="${p.href}"/>`,
+        )
+        break
     }
     if (opts.ids) {
       for (let i = first; i < body.length; i++) {
@@ -121,8 +128,10 @@ function label(p: Extract<Prim, { kind: 'label' }>, mode: 'outlines' | 'text'): 
   const s = w / vw
   // MathJax's inner group already carries scale(1,-1), so its viewBox is y-down like ours:
   // map it onto the box with no further flip. A second flip drew every label upside down.
+  // Its glyphs are filled with currentColor, which reads `color`, not the parent's fill:
+  // without `color` every label took the page's text colour, whatever it was set to.
   return `<g transform="translate(${n(x)} ${n(y)}) scale(${n(s)}) translate(${n(-vx)} ${n(-vy)})" ` +
-    `fill="${p.style.stroke}" stroke="none">${inner}</g>`
+    `fill="${p.style.stroke}" color="${p.style.stroke}" stroke="none">${inner}</g>`
 }
 
 function arcPath(c: Pt, r: number, a0: number, a1: number): string {

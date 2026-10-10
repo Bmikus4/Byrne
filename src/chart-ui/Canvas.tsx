@@ -7,6 +7,7 @@ import { keyPoints, snap } from '../chart/snap.js'
 import { toSvg } from '../figure/svg.js'
 import type { Pt } from '../figure/ir.js'
 import { Tool, useChart } from './store.js'
+import { addPictures } from './images.js'
 
 type Gesture =
   | { kind: 'pan'; sx: number; sy: number; ox: number; oy: number }
@@ -41,7 +42,8 @@ function shapeFromDrag(o: Obj, s: Vec, q: Vec): Obj {
   const r = Math.max(0.1, Math.hypot(dx, dy))
   const ang = (Math.atan2(dy, dx) * 180) / Math.PI
   switch (o.type) {
-    case 'circle': case 'band': case 'rings': return { ...o, r }
+    case 'circle': case 'band': case 'rings': case 'field': return { ...o, r }
+    case 'image': return o
     case 'arc': return { ...o, r, from: Math.round(ang - 45), to: Math.round(ang + 45) }
     case 'ticks': return { ...o, r, from: Math.round(ang - 30), to: Math.round(ang + 30) }
     case 'line': return { ...o, b: q }
@@ -375,6 +377,13 @@ export function Canvas(): JSX.Element {
       onPointerLeave={() => { setHover(null); useChart.getState().set('cursor', null) }}
       onDoubleClick={() => { if (penId.current) finishPen() }}
       onContextMenu={(e) => e.preventDefault()}
+      onDragOver={(e) => { if ([...e.dataTransfer.items].some((i) => i.type.startsWith('image/'))) e.preventDefault() }}
+      onDrop={(e) => {
+        const files = [...e.dataTransfer.files].filter((f) => f.type.startsWith('image/'))
+        if (!files.length) return
+        e.preventDefault()
+        void addPictures(files, toPoint(e).w)
+      }}
     >
       <svg width={size.w} height={size.h} style={{ display: 'block' }}>
         <rect width={size.w} height={size.h} fill={doc.background} />

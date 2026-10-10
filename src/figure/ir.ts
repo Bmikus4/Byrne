@@ -5,10 +5,11 @@
 // between a 12 KB figure and a 4 MB one, and between a figure that survives a journal's
 // typesetting and one that does not.
 //
-// There is no bitmap in this module or anywhere downstream of it. `figure/` imports no
-// canvas and no rasteriser, which is what makes "a screenshot cannot be exported as
-// vector" a property of the import graph rather than a promise. test/import-graph.test.ts
-// asserts it.
+// There is no rasteriser in this module or anywhere downstream of it. `figure/` imports no
+// canvas, which is what makes "a screenshot cannot be exported as vector" a property of
+// the import graph rather than a promise. test/import-graph.test.ts asserts it. The one
+// bitmap primitive, `image`, carries pixels the author supplied (an imported picture, a
+// computed field) as encoded bytes, and every serialiser passes those bytes through.
 
 export interface Style {
   readonly stroke?: string
@@ -30,6 +31,8 @@ export type Prim =
   | { readonly kind: 'arc'; readonly c: Pt; readonly r: number; readonly a0: number; readonly a1: number; readonly style: Style; readonly depth: number; readonly id: string }
   | { readonly kind: 'cubic'; readonly pts: readonly Pt[]; readonly style: Style; readonly depth: number; readonly id: string }
   | { readonly kind: 'label'; readonly at: Pt; readonly latex: string; readonly anchorX: number; readonly anchorY: number; readonly fontSize: number; readonly baseline?: boolean; readonly style: Style; readonly depth: number; readonly id: string }
+  /** `at` is the top-left corner; `href` a data: URL of a PNG or JPEG. */
+  | { readonly kind: 'image'; readonly at: Pt; readonly w: number; readonly h: number; readonly href: string; readonly style: Style; readonly depth: number; readonly id: string }
 
 export interface Figure {
   /** Page box in points. */
@@ -83,6 +86,7 @@ export function bounds(prims: readonly Prim[]): { min: Pt; max: Pt } {
       case 'ellipse': see([p.c[0] - p.rx, p.c[1] - p.ry]); see([p.c[0] + p.rx, p.c[1] + p.ry]); break
       case 'arc': see([p.c[0] - p.r, p.c[1] - p.r]); see([p.c[0] + p.r, p.c[1] + p.r]); break
       case 'label': see(p.at); break
+      case 'image': see(p.at); see([p.at[0] + p.w, p.at[1] + p.h]); break
     }
   }
   if (!Number.isFinite(x0)) return { min: [0, 0], max: [1, 1] }

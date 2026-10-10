@@ -80,6 +80,13 @@ code { font: 12px var(--mono); background: var(--panel-2); padding: 0 3px; borde
 }
 .tool:hover { background: var(--panel-2); color: var(--ink); }
 .tool.on { background: #fff; color: var(--accent); border-color: var(--accent-soft); box-shadow: 0 1px 3px #0000000f; }
+/* Seventeen tools fit a 900px-tall window only when packed this tight; otherwise the last
+   ones sit below the fold and look absent. */
+@media (max-height: 1000px) {
+  .tools { gap: 0; padding: 4px 6px; }
+  .tool { padding: 3px 2px 2px; gap: 1px; }
+  .tool svg { width: 20px; height: 20px; }
+}
 
 /* ---------- stage ---------- */
 .stage { grid-area: stage; position: relative; min-width: 0; min-height: 0; overflow: hidden; background: #fff; }

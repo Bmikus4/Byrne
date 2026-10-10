@@ -28,6 +28,12 @@ orbits you reshape by dragging the satellite or its velocity. Everything snaps t
 or circular grid. It draws through the same figure pipeline as the 3D editor, so PNG, SVG,
 PDF and TikZ exports are the picture on screen. Charts I, II and III open as templates.
 
+Pictures come in by button, drop or paste and are stored in the chart file. The radial
+heatmap is Figure 8 of *The Need for Quantum Relativity*: a self-similar field of crests and
+spiral pockets, with its slice read out as a spectrum and a binary string; it opens as the
+"Experience map" template. Export, Animated SVG writes a file that plays in any browser:
+satellites run at Kepler speed and fields flow one crest per period, seamlessly.
+
 ## The deployed page
 
 `npm run build` renders `docs/DESIGN.md` to `dist/index.html`. That is all the web

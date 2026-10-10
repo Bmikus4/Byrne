@@ -4,7 +4,7 @@
 // data by svgpath.ts and drawn as vector outlines. A PDF label is therefore the same
 // shape as the SVG label, not a Times approximation of it.
 
-import { PDFDocument, rgb, PDFPage } from 'pdf-lib'
+import { PDFDocument, PDFImage, rgb, PDFPage } from 'pdf-lib'
 import { Figure, Prim, Pt, Style } from './ir.js'
 import { placeLabel, typeset } from './labels.js'
 import { IDENTITY, Matrix, flattenSvg, matMul } from './svgpath.js'
@@ -46,13 +46,23 @@ export async function toPdf(fig: Figure, opts: PdfOptions = {}): Promise<Uint8Ar
     })
   }
 
-  for (const p of fig.prims) draw(page, p, P, Y, fig)
+  // Images are embedded once per distinct source, before drawing, because embedding is
+  // async and the drawing loop is not.
+  const images = new Map<string, PDFImage>()
+  for (const p of fig.prims) {
+    if (p.kind !== 'image' || images.has(p.href)) continue
+    const jpeg = /^data:image\/jpe?g/i.test(p.href)
+    images.set(p.href, jpeg ? await pdf.embedJpg(p.href) : await pdf.embedPng(p.href))
+  }
+
+  for (const p of fig.prims) draw(page, p, P, Y, fig, images)
   return pdf.save({ useObjectStreams: false })
 }
 
 function draw(
   page: PDFPage, p: Prim,
   P: (p: Pt) => { x: number; y: number }, Y: (y: number) => number, fig: Figure,
+  images: ReadonlyMap<string, PDFImage>,
 ): void {
   const s: Style = p.style
   const stroke = color(s.stroke)
@@ -123,6 +133,11 @@ function draw(
         out.push(`C ${[p.pts[i]!, p.pts[i + 1]!, p.pts[i + 2]!].map((q) => `${f(q[0])} ${f(q[1])}`).join(' ')}`)
       }
       shape(out.join(' '), true)
+      break
+    }
+    case 'image': {
+      const img = images.get(p.href)
+      if (img) page.drawImage(img, { x: p.at[0], y: Y(p.at[1] + p.h), width: p.w, height: p.h, opacity: s.opacity })
       break
     }
     case 'label': {

@@ -9,6 +9,7 @@ import { Inspector } from './Inspector.js'
 import { Layers, TOOLS, ToolBar } from './Sidebar.js'
 import { duplicates, useChart } from './store.js'
 import { ExportKind, exportChart, openChartFile } from './io.js'
+import { addPictures, pickPictures } from './images.js'
 
 export function ChartApp(): JSX.Element {
   useShortcuts()
@@ -40,7 +41,7 @@ function TopBar(): JSX.Element {
   const canRedo = useChart((st) => st.future.length > 0)
   const grid = useChart((st) => st.doc.grid)
   const zoom = useChart((st) => st.view.zoom)
-  const hasOrbits = useChart((st) => st.doc.objects.some((o) => o.type === 'orbit'))
+  const moves = useChart((st) => st.doc.objects.some((o) => o.type === 'orbit' || (o.type === 'field' && o.flow !== 'still')))
   const playing = useChart((st) => st.playing)
   const time = useChart((st) => st.time)
   const [menu, setMenu] = useState(false)
@@ -71,8 +72,9 @@ function TopBar(): JSX.Element {
             <div className="menu" onMouseLeave={() => setMenu(false)}>
               <button onClick={() => doExport('png')}><b>Picture</b> PNG, high resolution</button>
               <button onClick={() => doExport('svg')}><b>Vector</b> SVG, for the web and Illustrator</button>
+              <button onClick={() => doExport('animated')}><b>Animated</b> SVG that plays in a browser: orbits and flowing fields</button>
               <button onClick={() => doExport('pdf')}><b>PDF</b> for print</button>
-              <button onClick={() => doExport('tex')}><b>LaTeX</b> TikZ, compiles on its own</button>
+              <button onClick={() => doExport('tex')}><b>LaTeX</b> TikZ, compiles on its own (a .zip when there are pictures)</button>
             </div>
           )}
         </span>
@@ -92,9 +94,9 @@ function TopBar(): JSX.Element {
         <button onClick={() => zoomBy(1.25)} title="Zoom in (+)">+</button>
         <button onClick={() => s.set('fitAt', Date.now())} title="Fit the chart to the window (0)">Fit</button>
       </div>
-      {hasOrbits && (
+      {moves && (
         <div className="tb-group">
-          <button className={playing ? 'on' : ''} onClick={() => s.set('playing', !playing)} title="Run time forward: satellites move along their orbits">{playing ? 'Pause' : 'Play orbits'}</button>
+          <button className={playing ? 'on' : ''} onClick={() => s.set('playing', !playing)} title="Run time forward: satellites move along their orbits, fields flow">{playing ? 'Pause' : 'Play'}</button>
           {time !== 0 && <button onClick={() => { s.set('playing', false); s.set('time', 0) }} title="Back to the drawn positions">Reset</button>}
         </div>
       )}
@@ -190,7 +192,6 @@ function useShortcuts(): void {
       const sel = s.doc.objects.filter((o) => s.selection.includes(o.id))
       if (mod && k === 'd') { e.preventDefault(); if (sel.length) s.add(duplicates(sel)); return }
       if (mod && k === 'c') { if (sel.length) s.set('clipboard', structuredClone(sel)); return }
-      if (mod && k === 'v') { if (s.clipboard.length) s.add(duplicates(s.clipboard)); return }
       if (mod) return
       if (e.key === 'Delete' || e.key === 'Backspace') { if (sel.length) { e.preventDefault(); s.remove(sel.map((o) => o.id)) } return }
       if (e.key === 'Escape') {
@@ -210,10 +211,21 @@ function useShortcuts(): void {
       if (k === '0') { s.set('fitAt', Date.now()); return }
       if (k === '?') { s.set('dialog', 'help'); return }
       const t = TOOLS.find((x) => x.key.toLowerCase() === k)
-      if (t) s.setTool(t.id)
+      if (t) { if (t.id === 'image') pickPictures(); else s.setTool(t.id) }
+    }
+    // Paste is handled on the paste event, not on Ctrl+V, because only the event can see
+    // a picture on the system clipboard; a picture there wins over copied chart objects.
+    const onPaste = (e: ClipboardEvent): void => {
+      const tag = (document.activeElement as HTMLElement | null)?.tagName ?? ''
+      if (/^(INPUT|TEXTAREA|SELECT)$/.test(tag)) return
+      const files = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith('image/'))
+      const s = useChart.getState()
+      if (files.length) { e.preventDefault(); void addPictures(files); return }
+      if (s.clipboard.length) { e.preventDefault(); s.add(duplicates(s.clipboard)) }
     }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('paste', onPaste)
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('paste', onPaste) }
   }, [])
 }
 
