@@ -52,7 +52,9 @@ export type Obj =
     type: 'curve'; mode: CurveMode; at: Vec; fx: string; px: string; py: string; pr: string
     from: number; to: number; k: number; scale: number
   }
-  | Base & { type: 'path'; pts: Vec[]; smooth: boolean; closed: boolean }
+  // tan: the curve's direction through each point once a point has been dragged; null or
+  // absent means it follows from the neighbours.
+  | Base & { type: 'path'; pts: Vec[]; smooth: boolean; closed: boolean; tan?: (Vec | null)[] }
   | Base & {
     type: 'orbit'; c: Vec; mu: number; at: Vec; vel: Vec; arrowScale: number
     showBody: boolean; showSatellite: boolean; showVelocity: boolean; showFoci: boolean
@@ -287,7 +289,11 @@ export function setHandle(o: Obj, key: string, p: Vec): Obj {
       const i = Number(key.slice(1))
       const pts = o.pts.slice()
       pts[i] = p
-      return { ...o, pts }
+      if (!o.smooth) return { ...o, pts }
+      // Every other point keeps the direction the curve already had through it. Deriving
+      // each direction from its neighbours made one drag bend the curve two points away.
+      const was = tangents(o.pts, o.closed), now = tangents(pts, o.closed)
+      return { ...o, pts, tan: o.pts.map((_, j) => (j === i ? now[j]! : o.tan?.[j] ?? was[j]!)) }
     }
     case 'orbit':
       // The body's square carries the whole system: the satellite keeps its place
@@ -299,6 +305,16 @@ export function setHandle(o: Obj, key: string, p: Vec): Obj {
 }
 
 const round = (x: number): number => Math.round(x * 10) / 10
+
+/** Catmull-Rom direction through each point; an open curve's ends lean on their one neighbour. */
+export function tangents(pts: readonly Vec[], closed: boolean): Vec[] {
+  const n = pts.length
+  return pts.map((_, i) => {
+    const a = pts[closed ? (i - 1 + n) % n : Math.max(0, i - 1)]!
+    const b = pts[closed ? (i + 1) % n : Math.min(n - 1, i + 1)]!
+    return [(b[0] - a[0]) / 2, (b[1] - a[1]) / 2]
+  })
+}
 
 /** Keep an end angle on the same turn as before, so dragging past 180 does not flip it. */
 function unwrapNear(deg: number, prev: number): number {

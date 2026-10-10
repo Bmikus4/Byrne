@@ -8,7 +8,7 @@
 
 import { ExprError, ValueEnv, evaluate, parse } from '../core/expr.js'
 import { T, Value, vScalar } from '../core/values.js'
-import type { CurveMode, Vec } from './model.js'
+import { CurveMode, Vec, tangents } from './model.js'
 
 export function friendly(src: string): string {
   return src
@@ -115,18 +115,17 @@ function tidy(msg: string): string {
 }
 
 /** Catmull-Rom through the points, as cubic Bezier control points: p0 c1 c2 p1 c1 c2 p2 ... */
-export function smoothThrough(pts: readonly Vec[], closed: boolean): Vec[] {
+export function smoothThrough(pts: readonly Vec[], closed: boolean, tan?: readonly (Vec | null)[]): Vec[] {
   if (pts.length < 2) return pts.slice()
-  const P = closed ? [pts[pts.length - 1]!, ...pts, pts[0]!, pts[1]!] : [pts[0]!, ...pts, pts[pts.length - 1]!]
-  const out: Vec[] = [P[1]!]
-  const segs = closed ? pts.length : pts.length - 1
-  for (let i = 1; i <= segs; i++) {
-    const p0 = P[i - 1]!, p1 = P[i]!, p2 = P[i + 1]!, p3 = P[i + 2]!
-    out.push(
-      [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6],
-      [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6],
-      p2,
-    )
+  const n = pts.length
+  const auto = tangents(pts, closed)
+  const T = (i: number): Vec => tan?.[i] ?? auto[i]!
+  const out: Vec[] = [pts[0]!]
+  const segs = closed ? n : n - 1
+  for (let i = 0; i < segs; i++) {
+    const j = (i + 1) % n
+    const p1 = pts[i]!, p2 = pts[j]!, t1 = T(i), t2 = T(j)
+    out.push([p1[0] + t1[0] / 3, p1[1] + t1[1] / 3], [p2[0] - t2[0] / 3, p2[1] - t2[1] / 3], p2)
   }
   return out
 }

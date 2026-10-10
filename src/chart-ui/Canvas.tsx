@@ -173,16 +173,20 @@ export function Canvas(): JSX.Element {
 
   function handleAt(pt: Pt): { id: string; key: string } | null {
     const s = useChart.getState()
-    const tol = (HANDLE_PX + 3) / s.view.zoom
-    for (const id of [...s.selection].reverse()) {
+    // 14 px, nearest wins: at 9 px a press that just missed a dot landed on the line and
+    // dragged the whole curve.
+    let best: { id: string; key: string } | null = null
+    let bestD = 14 / s.view.zoom
+    for (const id of s.selection) {
       const o = s.doc.objects.find((x) => x.id === id)
       if (!o || o.locked) continue
-      for (const h of [...handles(o)].reverse()) {
+      for (const h of handles(o)) {
         const q = toPt(h.at)
-        if (Math.hypot(q[0] - pt[0], q[1] - pt[1]) <= tol) return { id, key: h.key }
+        const d = Math.hypot(q[0] - pt[0], q[1] - pt[1])
+        if (d <= bestD) { best = { id, key: h.key }; bestD = d }
       }
     }
-    return null
+    return best
   }
 
   function onPointerDown(e: React.PointerEvent): void {

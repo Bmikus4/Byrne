@@ -176,7 +176,7 @@ export function render(objects: readonly Obj[], opts: RenderOpts = {}): Rendered
       case 'path': {
         if (o.pts.length === 1) { grow(...ptBox(toPt(o.pts[0]!), 4)); break }
         if (o.smooth && o.pts.length > 2) {
-          push({ kind: 'cubic', pts: smoothThrough(o.pts, o.closed).map(toPt), style: st({ fill: o.closed ? o.fill || 'none' : 'none' }), depth: d, id })
+          push({ kind: 'cubic', pts: smoothThrough(o.pts, o.closed, o.tan).map(toPt), style: st({ fill: o.closed ? o.fill || 'none' : 'none' }), depth: d, id })
         } else {
           push({ kind: 'polyline', pts: o.pts.map(toPt), closed: o.closed, style: st({ fill: o.closed ? o.fill || 'none' : 'none' }), depth: d, id })
         }

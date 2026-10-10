@@ -321,7 +321,7 @@ function PathPanel({ o, patch }: { o: ObjOf<'path'>; patch: Patch<ObjOf<'path'>>
   return (<>
     <Section title="Drawn curve">
       <Toggle checked={o.smooth} label="Smooth through the points" onChange={(smooth) => patch({ smooth }, 'smooth')} />
-      <Toggle checked={o.closed} label="Close the shape" onChange={(closed) => patch({ closed }, 'closed')} />
+      <Toggle checked={o.closed} label="Close the shape" onChange={(closed) => patch({ closed, tan: o.tan?.map((t, j) => (j === 0 || j === o.pts.length - 1 ? null : t)) }, 'closed')} />
       <p className="tip">{o.pts.length} points. Drag any point to reshape it.</p>
     </Section>
     <LineStyle o={o} patch={patch as Patch<Obj>} fill={o.closed} />

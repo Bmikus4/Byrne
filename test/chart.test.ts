@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import {
   advance, elementsOf, equalTimeNus, nuAt, pointAt, radiusAt, stateFrom, timeFromPeri, velocityAt,
 } from '../src/chart/orbit.js'
-import { compile, friendly, sample } from '../src/chart/curves.js'
+import { compile, friendly, sample, smoothThrough } from '../src/chart/curves.js'
 import { toLatex, layoutField } from '../src/chart/text.js'
 import { snap, snapToGrid } from '../src/chart/snap.js'
 import { K, render, ringRadii, toFigure, toPt } from '../src/chart/render.js'
@@ -223,5 +223,33 @@ describe('the figure', () => {
     const back = normalize(raw)
     expect(back.objects[0]!.opacity).toBe(1)
     expect(back.objects.length).toBe(d.objects.length)
+  })
+})
+
+describe('drawn curves', () => {
+  const zig: Vec[] = [[0, 0], [1, 2], [2, 0], [3, 2], [4, 0], [5, 2]]
+  const draw = (o: ObjOf<'path'>): Vec[] => smoothThrough(o.pts, o.closed, o.tan)
+  const span = (c: Vec[], s: number): Vec[] => c.slice(3 * s, 3 * s + 4)
+
+  it('dragging a point reshapes only the two spans that touch it', () => {
+    const o = { ...make('path', [0, 0]), pts: zig } as ObjOf<'path'>
+    const before = draw(o)
+    const moved = setHandle(o, 'p2', [2, -3]) as ObjOf<'path'>
+    const after = draw(moved)
+    expect(moved.pts.filter((p, i) => p !== zig[i]).length).toBe(1)
+    for (const s of [0, 3, 4]) expect(span(after, s)).toEqual(span(before, s))
+    expect(span(after, 1)).not.toEqual(span(before, 1))
+    // A second drag elsewhere keeps the first one's neighbours where they were.
+    const again = setHandle(moved, 'p4', [4, 1]) as ObjOf<'path'>
+    expect(span(draw(again), 0)).toEqual(span(before, 0))
+    expect(span(draw(again), 1)).toEqual(span(after, 1))
+  })
+
+  it('an undragged curve is the same Catmull-Rom curve it always was', () => {
+    const o = { ...make('path', [0, 0]), pts: zig } as ObjOf<'path'>
+    const c = draw(o)
+    // First span: control points at p0 + (p1 - p0)/6 and p1 - (p2 - p0)/6.
+    expect(c[1]).toEqual([1 / 6, 2 / 6])
+    expect(c[2]).toEqual([1 - 2 / 6, 2])
   })
 })
