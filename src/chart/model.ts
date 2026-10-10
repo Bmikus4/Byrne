@@ -67,7 +67,7 @@ export type Obj =
   | Base & {
     type: 'field'; c: Vec; r: number; ratio: number; pockets: number; strength: number; twist: number
     seed: number; palette: Palette; poles: boolean; geometry: boolean; slice: boolean; sliceAngle: number
-    sites: number; flow: 'in' | 'out' | 'still'; period: number; detail: number
+    sites: number; flow: 'in' | 'out' | 'still'; period: number; detail: number; record: boolean
   }
   // at is the centre; src a data: URL (PNG or JPEG); w and h in cm.
   | Base & { type: 'image'; at: Vec; w: number; h: number; src: string }
@@ -201,7 +201,7 @@ export function make(type: ObjType, at: Vec, extra: Partial<Obj> = {}): Obj {
     case 'field': o = {
       ...base, ...look({ color: '#c8501e', width: 2.4 }), type, c: at, r: 4, ratio: 1.45, pockets: 4,
       strength: 0.85, twist: 55, seed: 7, palette: 'jet', poles: false, geometry: true, slice: true,
-      sliceAngle: 90, sites: 32, flow: 'in', period: 4, detail: 360,
+      sliceAngle: 90, sites: 32, flow: 'in', period: 4, detail: 360, record: false,
     }; break
     case 'image': o = { ...base, ...look({ width: 0 }), type, at, w: 6, h: 4, src: '' }; break
   }

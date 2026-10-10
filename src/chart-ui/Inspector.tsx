@@ -7,7 +7,8 @@ import { sample } from '../chart/curves.js'
 import { Field, Num, Section, Segmented, Slider, Swatches, TextArea, Toggle, XY, fmt } from './controls.js'
 import { duplicates, selected, useChart } from './store.js'
 import { replacePicture } from './images.js'
-import { binaryOf, spectrum } from '../chart/field.js'
+import { STATES, binaryOf, framePhase, spectrum, stateRecord } from '../chart/field.js'
+import { downloadText, stateRecordText } from './io.js'
 import { SPECTRUM_SAMPLES } from '../chart/render.js'
 
 type Patch<T extends Obj> = (p: Partial<T>, field: string) => void
@@ -458,8 +459,10 @@ function FieldPanel({ o, patch }: { o: ObjOf<'field'>; patch: Patch<ObjOf<'field
         <Field label="Slice direction" hint="90° is straight up the plumb line"><Slider value={o.sliceAngle} min={0} max={360} step={1} unit="°" onChange={(sliceAngle) => patch({ sliceAngle }, 'sliceAngle')} /></Field>
         <Field label="Sites"><Slider value={o.sites} min={4} max={64} step={1} onChange={(v) => patch({ sites: Math.round(v) }, 'sites')} /></Field>
         <p className="tip mono">{bits}</p>
+        <Toggle checked={o.record} label={`Record every state: ${STATES} frames under the strip`} onChange={(record) => patch({ record }, 'record')} />
       </>}
     </Section>
+    {o.slice && o.record && <RecordSection o={o} />}
     <Section title="Motion">
       <Field label="Flow" hint="Play (top bar) runs it. Exported by Export, Animated SVG.">
         <Segmented value={o.flow} onChange={(flow) => patch({ flow }, 'flow')} options={[
@@ -469,6 +472,25 @@ function FieldPanel({ o, patch }: { o: ObjOf<'field'>; patch: Patch<ObjOf<'field
       {o.flow !== 'still' && <Field label="Seconds per crest"><Slider value={o.period} min={0.5} max={20} step={0.5} unit="s" onChange={(period) => patch({ period }, 'period')} /></Field>}
     </Section>
   </>)
+}
+
+function RecordSection({ o }: { o: ObjOf<'field'> }): JSX.Element {
+  const sites = Math.round(o.sites)
+  const rows = useMemo(() => stateRecord(o, o.sliceAngle, sites, o.flow), [o, sites])
+  const distinct = new Set(rows).size
+  // Frame STATES is phase 1, which the field's self-similarity makes frame 0 again.
+  const closes = binaryOf(spectrum(o, o.sliceAngle, 400, framePhase(o.flow, 0) + 1), sites) === rows[0]
+  const flat = rows.join('')
+  const name = (o.name || 'heatmap').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-')
+  return (
+    <Section title="State record">
+      <p className="tip">{rows.length} states × {sites} sites = <b>{flat.length} bits</b>. {distinct} of the {rows.length} states are different; frame {rows.length} {closes ? 'is frame 0 again' : 'differs from frame 0'}, so this is the whole history.</p>
+      <div className="row-buttons">
+        <button onClick={() => { void navigator.clipboard.writeText(flat) }} title="One line of every bit, frame after frame">Copy the {flat.length}-bit string</button>
+        <button onClick={() => downloadText(`${name}-states.txt`, stateRecordText(o, rows))} title="One row per frame, with the numbers that regenerate it">Download as text</button>
+      </div>
+    </Section>
+  )
 }
 
 function ImagePanel({ o, patch }: { o: ObjOf<'image'>; patch: Patch<ObjOf<'image'>> }): JSX.Element {

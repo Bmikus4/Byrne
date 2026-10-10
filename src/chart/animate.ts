@@ -13,14 +13,15 @@
 // is one image under two transforms, not a stack of frames.
 
 import type { ChartDoc, ObjOf, Vec } from './model.js'
-import { K, SPECTRUM_SAMPLES, toFigure, toPt } from './render.js'
+import { K, toFigure, toPt } from './render.js'
 import { advance, drawRange, elementsOf, nuAt, pointAt, timeFromPeri, velocityAt } from './orbit.js'
-import { CORE, MID, binaryOf, colorOf, coreFade, fieldImage, spectrum, stripImage } from './field.js'
+import { CORE, MID, SPECTRUM_SAMPLES, STATES, colorOf, coreFade, fieldImage, framePhase, spectrum, stateRecord, stripImage } from './field.js'
 import { NOTE_GREY } from './text.js'
 import { toSvg } from '../figure/svg.js'
 
-/** Frames per loop for what cannot be a transform: the slice strips, and fields with poles. */
-const FRAMES = 24
+/** Frames per loop for a field with poles, which cannot be a transform. Its disk alone is
+ *  a stack of rasters, so it gets fewer frames than the strips (STATES). */
+const DISK_FRAMES = 24
 /** Samples per orbit loop. */
 const STEPS = 120
 const BIT_INK = '#1e2230'
@@ -42,6 +43,7 @@ export function toAnimatedSvg(doc: ChartDoc): string {
       if (kind === 'field') return fieldAnim(o, box, `anim-clip-${++clips}`)
       if (kind === 'spectrum') return spectrumAnim(o, box)
       if (kind === 'binary') return binaryAnim(o, box)
+      if (kind === 'record') return recordMarker(o, box)
       return ''
     },
   )
@@ -94,7 +96,7 @@ function orbitAnim(o: ObjOf<'orbit'>, box: Box): string {
 }
 
 /** Flow phase of frame k: the editor's phase convention, so both show the same thing. */
-const phaseOf = (o: ObjOf<'field'>, k: number): number => (o.flow === 'in' ? k / FRAMES : (FRAMES - k) % FRAMES / FRAMES)
+const phaseOf = (o: ObjOf<'field'>, k: number, frames: number): number => framePhase(o.flow, k, frames)
 
 /** A stack of images where frame k alone is visible during the k-th slice of the loop. */
 function frames(urls: string[], box: Box, dur: number, extra = ''): string {
@@ -112,7 +114,7 @@ function fieldAnim(o: ObjOf<'field'>, box: Box, clip: string): string {
   if (o.poles) {
     // The pole fields sit still while the main one flows, so this field is not one
     // image under a transform: it is frames.
-    const urls = Array.from({ length: FRAMES }, (_, k) => fieldImage(o, o.palette, Math.min(detail, 280), phaseOf(o, k)))
+    const urls = Array.from({ length: DISK_FRAMES }, (_, k) => fieldImage(o, o.palette, Math.min(detail, 280), phaseOf(o, k, DISK_FRAMES)))
     return `<g${op}>${frames(urls, box, o.period)}</g>`
   }
   const lam = Math.max(1.05, o.ratio)
@@ -137,13 +139,21 @@ function fieldAnim(o: ObjOf<'field'>, box: Box, clip: string): string {
 }
 
 function spectrumAnim(o: ObjOf<'field'>, box: Box): string {
-  const urls = Array.from({ length: FRAMES }, (_, k) => stripImage(spectrum(o, o.sliceAngle, SPECTRUM_SAMPLES, phaseOf(o, k)), o.palette))
+  const urls = Array.from({ length: STATES }, (_, k) => stripImage(spectrum(o, o.sliceAngle, SPECTRUM_SAMPLES, phaseOf(o, k, STATES)), o.palette))
   return frames(urls, box, o.period)
+}
+
+/** The row of the record being shown, stepping down one row per frame. */
+function recordMarker(o: ObjOf<'field'>, box: Box): string {
+  const rh = box.h / STATES
+  const ys = Array.from({ length: STATES }, (_, k) => n(box.y + k * rh - 0.5))
+  return `<rect x="${n(box.x - 3.4)}" y="${ys[0]}" width="${n(box.w + 6.8)}" height="${n(rh + 1)}" fill="none" stroke="${o.color}" stroke-width="0.9">` +
+    `<animate attributeName="y" values="${ys.join(';')}" calcMode="discrete" ${loop(o.period)}/></rect>`
 }
 
 function binaryAnim(o: ObjOf<'field'>, box: Box): string {
   const sites = Math.max(1, Math.min(128, Math.round(o.sites)))
-  const strings = Array.from({ length: FRAMES }, (_, k) => binaryOf(spectrum(o, o.sliceAngle, SPECTRUM_SAMPLES, phaseOf(o, k)), sites))
+  const strings = stateRecord(o, o.sliceAngle, sites, o.flow)
   const cw = box.w / sites
   const size = Math.min(7, cw * 0.6)
   const out: string[] = []

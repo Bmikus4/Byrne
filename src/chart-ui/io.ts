@@ -1,4 +1,4 @@
-import { ChartDoc, normalize } from '../chart/model.js'
+import { ChartDoc, ObjOf, normalize } from '../chart/model.js'
 import { toFigure } from '../chart/render.js'
 import { toSvg } from '../figure/svg.js'
 import { tikzImages, toTikz } from '../figure/tikz.js'
@@ -18,6 +18,25 @@ function download(name: string, data: BlobPart, type: string): void {
   a.click()
   a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 2000)
+}
+
+/**
+ * A heatmap's state record as text: a header that regenerates it, then one row per frame.
+ * The header is the point: the rows are a function of those numbers and nothing else.
+ */
+export function stateRecordText(o: ObjOf<'field'>, rows: readonly string[]): string {
+  return [
+    `# Heatmap state record: ${rows.length} frames x ${rows[0]?.length ?? 0} sites = ${rows.length * (rows[0]?.length ?? 0)} bits.`,
+    '# One row per frame, top to bottom, over one loop of the flow; frame ' + rows.length + ' is frame 0 again.',
+    `# ratio=${o.ratio} pockets=${o.pockets} strength=${o.strength} twist=${o.twist} seed=${o.seed} poles=${o.poles} ` +
+      `slice=${o.sliceAngle} sites=${o.sites} flow=${o.flow === 'out' ? 'out' : 'in'}`,
+    ...rows,
+    '',
+  ].join('\n')
+}
+
+export function downloadText(name: string, text: string): void {
+  download(name, text, 'text/plain')
 }
 
 export type ExportKind = 'png' | 'svg' | 'animated' | 'pdf' | 'tex' | 'json'

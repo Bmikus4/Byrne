@@ -210,3 +210,5 @@ code { font: 12px var(--mono); background: var(--panel-2); padding: 0 3px; borde
   .tool span { font-size: 10px; }
   .topbar { overflow-x: auto; }
 }
+
+.row-buttons { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }

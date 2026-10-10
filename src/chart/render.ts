@@ -9,7 +9,7 @@ import { Arrow, COLORS, Obj, ObjOf, Vec } from './model.js'
 import { drawRange, elementsOf, equalTimeNus, advance, pointAt, velocityAt, Elements } from './orbit.js'
 import { sample, smoothThrough } from './curves.js'
 import { Block, NOTE_GREY, layoutBlock } from './text.js'
-import { binaryOf, fieldImage, spectrum, stripImage } from './field.js'
+import { STATES, SPECTRUM_SAMPLES, binaryOf, fieldImage, framePhase, spectrum, stateRecord, stripImage } from './field.js'
 
 /** Points per centimetre. */
 export const K = 28.3465
@@ -311,20 +311,30 @@ function roundedRect(x: number, y: number, w: number, h: number, r: number): Pt[
   return pts
 }
 
-/** Flow phase in crests, quantised to 1/48 so the raster cache holds one whole loop. */
-export function fieldPhase(o: ObjOf<'field'>, time: number): number {
+export { SPECTRUM_SAMPLES }
+
+/**
+ * The frame of the loop showing at `time`: one of STATES per period, so the strip under
+ * the field during Play shows exactly the rows of the record, and the raster cache holds
+ * one whole loop.
+ */
+export function fieldFrame(o: ObjOf<'field'>, time: number): number {
   if (o.flow === 'still' || !time) return 0
-  const q = (Math.round(((time / Math.max(0.1, o.period)) % 1) * 48) / 48) % 1
-  return o.flow === 'in' ? q : (1 - q) % 1
+  return Math.round((time / Math.max(0.1, o.period)) * STATES) % STATES
 }
 
-export const SPECTRUM_SAMPLES = 400
+export const fieldPhase = (o: ObjOf<'field'>, time: number): number =>
+  o.flow === 'still' ? 0 : framePhase(o.flow, fieldFrame(o, time))
 
-/** Where the slice strips sit under a field, in world cm: spectrum, then binary. */
-export function stripBoxes(o: ObjOf<'field'>): { spectrum: Box4; binary: Box4 } {
+/** Where the slice strips sit under a field, in world cm: spectrum, binary, record. */
+export function stripBoxes(o: ObjOf<'field'>): { spectrum: Box4; binary: Box4; record: Box4 } {
   const x0 = o.c[0] - o.r, x1 = o.c[0] + o.r
   const top = o.c[1] - o.r - 1.5
-  return { spectrum: [x0, top, x1, top - 0.9], binary: [x0, top - 1.65, x1, top - 2.4] }
+  return {
+    spectrum: [x0, top, x1, top - 0.9],
+    binary: [x0, top - 1.65, x1, top - 2.4],
+    record: [x0, top - 3.15, x1, top - 3.15 - 1.6 * o.r],
+  }
 }
 
 const BIT_INK = '#1e2230'
@@ -353,7 +363,7 @@ function fieldPrims(
   const a = (o.sliceAngle * Math.PI) / 180
   push({ kind: 'line', a: toPt(o.c), b: toPt([o.c[0] + o.r * Math.cos(a), o.c[1] + o.r * Math.sin(a)]), style: white(1.3), depth: d, id })
 
-  const { spectrum: sp, binary: bn } = stripBoxes(o)
+  const { spectrum: sp, binary: bn, record: rb } = stripBoxes(o)
   const values = spectrum(o, o.sliceAngle, SPECTRUM_SAMPLES, phase)
   const rect = (b: Box4): Pt[] => [toPt([b[0], b[1]]), toPt([b[2], b[1]]), toPt([b[2], b[3]]), toPt([b[0], b[3]])]
   const edge: Style = { stroke: BIT_INK, weight: 0.4, fill: 'none' }
@@ -365,16 +375,45 @@ function fieldPrims(
   const sites = Math.max(1, Math.min(128, Math.round(o.sites)))
   if (moving) {
     push({ kind: 'image', at: toPt([bn[0], bn[1]]), w: (bn[2] - bn[0]) * K, h: (bn[1] - bn[3]) * K, href: `anim:binary:${id}`, style: {}, depth: d, id })
-    return
+  } else {
+    const bits = binaryOf(values, sites)
+    const cw = (bn[2] - bn[0]) / sites
+    const size = Math.min(7, cw * K * 0.6)
+    for (let k = 0; k < sites; k++) {
+      const one = bits[k] === '1'
+      const cell: Box4 = [bn[0] + k * cw, bn[1], bn[0] + (k + 1) * cw, bn[3]]
+      push({ kind: 'polyline', pts: rect(cell), closed: true, style: { stroke: BIT_INK, weight: 0.3, fill: one ? BIT_INK : '#ffffff' }, depth: d, id })
+      label(toPt([cell[0] + cw / 2, (bn[1] + bn[3]) / 2 - size / K / 2.8]), `\\textsf{${bits[k]}}`, size, one ? '#ffffff' : BIT_INK)
+    }
   }
-  const bits = binaryOf(values, sites)
-  const cw = (bn[2] - bn[0]) / sites
-  const size = Math.min(7, cw * K * 0.6)
-  for (let k = 0; k < sites; k++) {
-    const one = bits[k] === '1'
-    const cell: Box4 = [bn[0] + k * cw, bn[1], bn[0] + (k + 1) * cw, bn[3]]
-    push({ kind: 'polyline', pts: rect(cell), closed: true, style: { stroke: BIT_INK, weight: 0.3, fill: one ? BIT_INK : '#ffffff' }, depth: d, id })
-    label(toPt([cell[0] + cw / 2, (bn[1] + bn[3]) / 2 - size / K / 2.8]), `\\textsf{${bits[k]}}`, size, one ? '#ffffff' : BIT_INK)
+  if (!o.record) return
+
+  // The record: one row per frame, top to bottom, each row one state. A run of ones that
+  // repeats down the rows is ONE rectangle: drawn row by row, antialiasing left a hairline
+  // of white between every pair of rows, and the 3840 cells stay a few hundred shapes.
+  const rows = stateRecord(o, o.sliceAngle, sites, o.flow)
+  const cw = (rb[2] - rb[0]) / sites, rh = (rb[1] - rb[3]) / rows.length
+  const ink: Style = { stroke: 'none', weight: 0, fill: BIT_INK }
+  const runsOf = (row: string): string[] => [...row.matchAll(/1+/g)].map((m) => `${m.index}-${m.index! + m[0].length}`)
+  let open = new Map<string, number>()
+  const close = (key: string, from: number, to: number): void => {
+    const [k, e] = key.split('-').map(Number) as [number, number]
+    push({ kind: 'polyline', pts: rect([rb[0] + k * cw, rb[1] - from * rh, rb[0] + e * cw, rb[1] - to * rh]), closed: true, style: ink, depth: d, id })
+  }
+  rows.forEach((row, f) => {
+    const next = new Map<string, number>()
+    for (const key of runsOf(row)) next.set(key, open.get(key) ?? f)
+    for (const [key, from] of open) if (!next.has(key)) close(key, from, f)
+    open = next
+  })
+  for (const [key, from] of open) close(key, from, rows.length)
+  push({ kind: 'polyline', pts: rect(rb), closed: true, style: edge, depth: d, id })
+  if (moving) {
+    push({ kind: 'image', at: toPt([rb[0], rb[1]]), w: (rb[2] - rb[0]) * K, h: (rb[1] - rb[3]) * K, href: `anim:record:${id}`, style: {}, depth: d, id })
+  } else if (opts.time && o.flow !== 'still') {
+    const f = fieldFrame(o, opts.time)
+    const y0 = rb[1] - f * rh
+    push({ kind: 'polyline', pts: rect([rb[0] - 0.12, y0 + 0.02, rb[2] + 0.12, y0 - rh - 0.02]), closed: true, style: { stroke: o.color, weight: 0.9, fill: 'none' }, depth: d, id })
   }
 }
 

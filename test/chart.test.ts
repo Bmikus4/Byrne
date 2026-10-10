@@ -348,3 +348,45 @@ describe('label colour', () => {
     expect(svg).toContain('fill="currentColor"')
   })
 })
+
+describe('the state record', () => {
+  it('is 120 states of 32 bits over one loop, and the loop closes', async () => {
+    const { stateRecord, binaryOf, spectrum, STATES, SPECTRUM_SAMPLES } = await import('../src/chart/field.js')
+    const o = make('field', [0, 0]) as ObjOf<'field'>
+    const rows = stateRecord(o, o.sliceAngle, 32, 'in')
+    expect(STATES).toBe(120)
+    expect(rows.length).toBe(120)
+    expect(rows.every((r) => /^[01]{32}$/.test(r))).toBe(true)
+    expect(rows.join('').length).toBe(3840)
+    expect(binaryOf(spectrum(o, o.sliceAngle, SPECTRUM_SAMPLES, 1), 32)).toBe(rows[0])
+    // Outward flow visits the same states in the reverse order.
+    const out = stateRecord(o, o.sliceAngle, 32, 'out')
+    expect(out[0]).toBe(rows[0])
+    expect(out.slice(1)).toEqual(rows.slice(1).reverse())
+  })
+
+  it('the strip under a playing field shows the record row of that frame', async () => {
+    const { stateRecord } = await import('../src/chart/field.js')
+    const { fieldFrame } = await import('../src/chart/render.js')
+    const o = make('field', [0, 0], { record: true }) as ObjOf<'field'>
+    const rows = stateRecord(o, o.sliceAngle, 32, o.flow)
+    for (const t of [0.5, 1.7, 3.3]) {
+      const f = fieldFrame(o, t)
+      const bits = render([o], { time: t }).prims
+        .filter((p) => p.kind === 'label' && /^\\textsf\{[01]\}$/.test(p.latex))
+        .map((p) => (p as { latex: string }).latex.slice(-2, -1)).join('')
+      expect(bits).toBe(rows[f])
+    }
+  })
+
+  it('the animated binary strip steps through the 120 recorded states', async () => {
+    const { toAnimatedSvg } = await import('../src/chart/animate.js')
+    const { experienceMap } = await import('../src/chart/templates.js')
+    const svg = toAnimatedSvg(experienceMap())
+    expect(svg).not.toContain('anim:')
+    const fills = [...svg.matchAll(/<animate attributeName="fill" values="([^"]+)"/g)].map((m) => m[1]!.split(';').length)
+    expect(fills.length).toBeGreaterThan(0)
+    expect(new Set(fills)).toEqual(new Set([120]))
+    expect(svg).toMatch(/<animate attributeName="y" values="(?:[^;"]+;){119}[^;"]+"/)
+  })
+})

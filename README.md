@@ -32,7 +32,9 @@ Pictures come in by button, drop or paste and are stored in the chart file. The 
 heatmap is Figure 8 of *The Need for Quantum Relativity*: a self-similar field of crests and
 spiral pockets, with its slice read out as a spectrum and a binary string; it opens as the
 "Experience map" template. Export, Animated SVG writes a file that plays in any browser:
-satellites run at Kepler speed and fields flow one crest per period, seamlessly.
+satellites run at Kepler speed and fields flow one crest per period, seamlessly. A field
+can record its state at each of the loop's 120 frames: 120 rows of 32 bits, drawn under
+the strip and downloadable as text with the parameters that regenerate it.
 
 ## The deployed page
 

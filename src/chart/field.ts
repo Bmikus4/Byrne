@@ -170,6 +170,27 @@ export function binaryOf(values: readonly number[], sites: number): string {
   return out
 }
 
+/** Frames per loop of the flow. The editor, the animated export and the record share it. */
+export const STATES = 120
+/** Samples along the slice before it is read as bits. */
+export const SPECTRUM_SAMPLES = 400
+
+/**
+ * Phase of frame k. A still field is recorded as if it flowed inward: the record is a
+ * property of the field, not of how it is being shown.
+ */
+export const framePhase = (flow: 'in' | 'out' | 'still', k: number, frames = STATES): number =>
+  flow === 'out' ? ((frames - (k % frames)) % frames) / frames : (k % frames) / frames
+
+/**
+ * The state at every frame of one loop: `frames` strings of `sites` bits. One loop is
+ * the whole history, because the field after one crest of flow is the field it started
+ * as (see the identity at the top of this file): frame `frames` is frame 0 again.
+ */
+export function stateRecord(s: FieldSpec, angleDeg: number, sites: number, flow: 'in' | 'out' | 'still', frames = STATES): string[] {
+  return Array.from({ length: frames }, (_, k) => binaryOf(spectrum(s, angleDeg, SPECTRUM_SAMPLES, framePhase(flow, k, frames)), sites))
+}
+
 const images = new Map<string, string>()
 
 /** A PNG data: URL of the disk, cached: the editor redraws on every pointer move. */

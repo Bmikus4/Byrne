@@ -212,7 +212,7 @@ export function keplerOrbits(): ChartDoc {
 export function experienceMap(): ChartDoc {
   const rim = '#c8501e'
   return doc('The radial structure and its encoding', [
-    make('field', [0, 0], { r: 5, name: "The observer's patch" }),
+    make('field', [0, 0], { r: 5, record: true, name: "The observer's patch" }),
     label([0, 5.3], { text: "the observer's patch: one field, emanated from the centre; the horn torus drawn inside it", anchor: 's', color: rim, size: 7, name: 'Title' }),
     label([0, -5.3], {
       text: 'radius = scale (fine to coarse), angle = direction; colour = density of placed observations.',
@@ -221,6 +221,7 @@ export function experienceMap(): ChartDoc {
     }),
     label([-5, -6.45], { text: 'the slice, projected onto a line: one continuous spectrum', anchor: 'sw', align: 'left', size: 6.5, name: 'Spectrum caption' }),
     label([-5, -8.1], { text: 'the same line read as binary: 32 sites, 1 above the median of the spectrum, 0 below', anchor: 'sw', align: 'left', size: 6.5, name: 'Binary caption' }),
+    label([-5, -9.52], { text: 'every state of one loop of the flow, one row per frame: 120 x 32 = 3840 bits', anchor: 'sw', align: 'left', size: 6.5, name: 'Record caption' }),
   ])
 }
 
